@@ -26,14 +26,14 @@ and Facebook daily via autopilot. Credits system: 30 credits = 1 video = $10 USD
 8. Always show a plan before writing code (files to create, files to modify, files to skip)
 
 ## Current build status
-- [ ] Phase 1 — Supabase schema + migrations
-- [ ] Phase 2 — Auth (magic link)
-- [ ] Phase 3 — Onboarding (4 steps)
-- [ ] Phase 4 — Dashboard
-- [ ] Phase 5 — Billing + Stripe
-- [ ] Phase 6 — Generate page + pipeline API
-- [ ] Phase 7 — Settings
-- [ ] Phase 8 — Cron autopilot
+- [x] Phase 1 — Supabase schema + migrations
+- [x] Phase 2 — Auth (magic link)
+- [x] Phase 3 — Onboarding (4 steps)
+- [x] Phase 4 — Dashboard
+- [x] Phase 5 — Billing + Stripe
+- [x] Phase 6 — Generate page + pipeline API
+- [x] Phase 7 — Settings
+- [x] Phase 8 — Cron autopilot
 
 Update this checklist as phases complete.
 
