@@ -1,4 +1,3 @@
-// @ts-expect-error — installed at runtime: npm install @anthropic-ai/sdk
 import Anthropic from '@anthropic-ai/sdk'
 import type { ComprehensionBrief, Project, ScenePlan } from '../types'
 import { CREATIVE_BRAIN_MODEL } from '../utils/model-router'

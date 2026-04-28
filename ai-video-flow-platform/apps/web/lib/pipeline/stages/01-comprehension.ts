@@ -39,7 +39,6 @@ async function analyzeReferenceVideo(
   projectId: string,
   contentType: string
 ): Promise<ComprehensionBrief> {
-  // @ts-expect-error — installed at runtime: npm install @google/generative-ai
   const { GoogleGenerativeAI } = await import('@google/generative-ai')
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
   const model = genAI.getGenerativeModel({ model: COMPREHENSION_MODEL })
