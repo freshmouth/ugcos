@@ -7,9 +7,9 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { project_id, content_type_override, custom_prompt, image_id } = await request.json()
+  const { project_id, content_type_override, custom_prompt, reference_video_url } = await request.json()
 
-  // 1. Validate project
+  // 1. Validate project ownership
   const { data: project, error: projectError } = await supabase
     .from('projects')
     .select('*')
@@ -21,28 +21,31 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'project_not_found' }, { status: 403 })
   }
 
-  // 2. Check credits
-  const { data: credits } = await supabase
-    .from('credits')
-    .select('balance')
+  // 2. Check active subscription and quota
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('*')
     .eq('user_id', user.id)
+    .eq('status', 'active')
     .single()
 
-  if (!credits || credits.balance < 30) {
-    return NextResponse.json({ error: 'insufficient_credits' }, { status: 402 })
+  if (!subscription) {
+    return NextResponse.json({ error: 'no_active_subscription' }, { status: 402 })
+  }
+
+  const quotas: Record<string, number> = { starter: 30, growth: 60, scale: Infinity }
+  const limit = quotas[subscription.tier] ?? 30
+  if (subscription.videos_used_this_cycle >= limit) {
+    return NextResponse.json({
+      error: 'quota_exceeded',
+      videos_used: subscription.videos_used_this_cycle,
+      limit,
+    }, { status: 402 })
   }
 
   const contentType = content_type_override || project.content_types?.[0] || 'informative'
 
-  // 3. Deduct credits
-  await supabase.from('credits').update({ balance: credits.balance - 30 }).eq('user_id', user.id)
-  await supabase.from('credit_transactions').insert({
-    user_id: user.id,
-    amount: -30,
-    reason: 'video_generated',
-  })
-
-  // 4. Create video row
+  // 3. Create video row
   const { data: video } = await supabase
     .from('videos')
     .insert({
@@ -58,14 +61,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to create video row' }, { status: 500 })
   }
 
-  // 5. Run pipeline in background (fire and forget)
+  // 4. Run pipeline in background (fire and forget)
   runPipeline({
-    project,
+    project: {
+      ...project,
+      character_reference_url: project.character_reference_url ?? null,
+      voice_reference_url: project.voice_reference_url ?? null,
+      hooks_library: project.hooks_library ?? [],
+    },
     userId: user.id,
     videoId: video.id,
     contentType,
     customPrompt: custom_prompt,
-    imageId: image_id,
+    referenceVideoUrl: reference_video_url,
     triggeredBy: 'manual',
   }).catch(console.error)
 

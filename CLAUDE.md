@@ -3,7 +3,7 @@
 ## What this is
 Multi-tenant SaaS. Users sign up, onboard their product, and the platform
 automatically generates 15-second short-form videos and posts them to Instagram
-and Facebook daily via autopilot. Credits system: 30 credits = 1 video = $10 USD.
+and Facebook daily via autopilot.
 
 ## Stack
 - Next.js 14 App Router (Vercel deployment)
@@ -72,10 +72,24 @@ Update this checklist as phases complete.
 6. Metricool — post to Instagram + Facebook
 7. Update videos row → status: 'done'
 
-## Credit flow
-- Signup trigger → 30 credits free (1 video)
-- Generate → deduct 30 credits → run pipeline → on fail: refund 30 credits
-- Top up → Stripe checkout → webhook → add credits to balance
+## Pricing model — Monthly Subscription (NOT credits)
+Three tiers managed via Stripe Subscriptions:
+
+Starter  — $1,999/mo  → 30 videos/mo, 1 brand, 1 avatar, auto posting, analytics
+Growth   — $3,499/mo  → 60 videos/mo, multi-avatar, multi-platform, comment/DM automation
+Scale    — $5,000+/mo → unlimited queue, custom hooks engine, A/B testing, ad creatives
+
+## Subscription logic
+- No credits system — remove entirely
+- Access gated by active Stripe subscription (check subscription status on each request)
+- Video quota resets on billing cycle date (store in subscriptions table)
+- Overage on Starter/Growth: block generation + show upgrade prompt
+- Scale tier: no hard limit, queue-based generation
+
+## Tables changed
+- DELETE: credits, credit_transactions tables
+- ADD: subscriptions table (user_id, tier, stripe_subscription_id, 
+  videos_used_this_cycle, cycle_reset_date, status)
 
 ## Env vars (all set in Vercel + .env.local — do not rename)
 NEXT_PUBLIC_SUPABASE_URL
