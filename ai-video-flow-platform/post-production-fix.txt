@@ -1,0 +1,294 @@
+Add a post-generation visual QA stage to the pipeline.
+Read CLAUDE.md first.
+
+This stage runs AFTER image generation (stage 3) AND after 
+video generation (stage 4). It must catch AI artifacts before 
+the video proceeds to captions or publishing.
+
+═══════════════════════════════════════
+CREATE: lib/pipeline/stages/03b-image-qa.ts
+═══════════════════════════════════════
+Runs after image generation, before video generation.
+
+Input: { image_url, project, videoId }
+
+Send the generated image to GPT-4o Vision for analysis:
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  max_tokens: 500,
+  messages: [{
+    role: 'user',
+    content: [
+      {
+        type: 'image_url',
+        image_url: { url: image_url, detail: 'high' }
+      },
+      {
+        type: 'text',
+        text: `You are a quality control inspector for AI-generated 
+UGC (user-generated content) product videos.
+
+Analyze this image and score it 1-10 on each criterion.
+Then give an overall PASS or FAIL verdict.
+
+Scoring criteria:
+
+1. PRODUCT PLACEMENT (1-10)
+   10 = product naturally held in hand or placed on surface
+   1  = product floating in air, detached from hand, 
+        or superimposed awkwardly
+
+2. HAND REALISM (1-10)  
+   10 = hands look completely natural, correct finger count
+   1  = extra fingers, melted fingers, no visible hand 
+        holding the product
+
+3. FACE QUALITY (1-10)
+   10 = realistic natural face, normal skin
+   1  = warped features, AI "pretty girl" look, 
+        waxy skin, weird eyes
+
+4. BACKGROUND REALISM (1-10)
+   10 = lived-in, authentic environment
+   1  = fake-looking, CGI, studio backdrop
+
+5. OVERALL UGC AUTHENTICITY (1-10)
+   10 = looks like a real paused TikTok frame
+   1  = obviously AI generated, polished, fake
+
+PASS criteria: ALL scores >= 6 AND no single score below 5
+FAIL criteria: ANY score below 5
+
+Return JSON only:
+{
+  "product_placement": 7,
+  "hand_realism": 6,
+  "face_quality": 8,
+  "background_realism": 7,
+  "ugc_authenticity": 7,
+  "overall_score": 7.0,
+  "verdict": "PASS",
+  "issues": [],
+  "fail_reason": null
+}
+
+For FAIL, issues array should list specific problems:
+  "floating product - bag not connected to hand"
+  "extra fingers on left hand"
+  "waxy AI skin texture"
+  "studio lighting not authentic"
+`
+      }
+    ]
+  }]
+})
+
+const qa = JSON.parse(response.choices[0].message.content)
+
+If FAIL:
+  console.log('[IMAGE-QA] FAILED:', qa.fail_reason, qa.issues)
+  
+  // Retry image generation up to 2 more times
+  if (retryCount < 2) {
+    console.log('[IMAGE-QA] Retrying image generation...')
+    // Re-run stage 3 with a modified prompt that addresses the issues
+    const fixedPrompt = await buildFixedPrompt(adaptedPrompt, qa.issues)
+    return retryImageGeneration(fixedPrompt, productImageUrl, retryCount + 1)
+  }
+  
+  // After 2 retries, mark as failed and stop pipeline
+  await supabase.from('videos').update({ 
+    status: 'failed',
+    error_message: `Image QA failed after 3 attempts: ${qa.fail_reason}`
+  }).eq('id', videoId)
+  
+  throw new Error(`Image QA failed: ${qa.fail_reason}`)
+
+If PASS:
+  console.log('[IMAGE-QA] PASSED. Score:', qa.overall_score)
+  // Store QA scores in videos table
+  await supabase.from('videos').update({
+    qa_image_score: qa.overall_score,
+    qa_image_data: qa
+  }).eq('id', videoId)
+  return { image_url, qa_score: qa.overall_score }
+
+buildFixedPrompt function:
+  Takes original prompt + list of issues
+  Appends fix instructions:
+  
+  if issues includes 'floating product':
+    prompt += ' CRITICAL: The product MUST be physically held in the 
+    person\'s hand with fingers wrapped around it naturally. 
+    The product cannot float or be superimposed. 
+    Show a firm natural grip.'
+  
+  if issues includes 'extra fingers':
+    prompt += ' CRITICAL: Hands must have exactly 5 fingers each. 
+    Keep hands below chest level and away from the camera lens.'
+  
+  if issues includes 'waxy skin':
+    prompt += ' CRITICAL: Skin must look real with natural texture, 
+    pores visible, no beauty filter, no AI smoothing.'
+  
+  if issues includes 'studio lighting':
+    prompt += ' CRITICAL: Natural window light only, uneven and 
+    slightly imperfect. No professional lighting setup.'
+
+═══════════════════════════════════════
+CREATE: lib/pipeline/stages/04b-video-qa.ts
+═══════════════════════════════════════
+Runs after video generation, before captions/publish.
+
+Input: { video_url, project, videoId }
+
+Extract 3 frames from the video for analysis:
+  Frame 1: at 25% of duration (early)
+  Frame 2: at 50% of duration (middle — product reveal)
+  Frame 3: at 75% of duration (late)
+
+Use FAL's frame extraction or download video and use ffmpeg:
+  ffmpeg -i video.mp4 -vf "select=eq(n\,3)" -frames:v 1 frame1.jpg
+  ffmpeg -i video.mp4 -vf "select=eq(n\,7)" -frames:v 1 frame2.jpg
+  ffmpeg -i video.mp4 -vf "select=eq(n\,11)" -frames:v 1 frame3.jpg
+
+Send all 3 frames to GPT-4o Vision in one call:
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o',
+  max_tokens: 500,
+  messages: [{
+    role: 'user',
+    content: [
+      { type: 'image_url', image_url: { url: frame1_url } },
+      { type: 'image_url', image_url: { url: frame2_url } },
+      { type: 'image_url', image_url: { url: frame3_url } },
+      {
+        type: 'text',
+        text: `You are a QA inspector for AI-generated UGC videos.
+These are 3 frames from a generated video (early/middle/late).
+
+Check for these specific video artifacts:
+
+1. PRODUCT STABILITY (1-10)
+   Does the product stay consistent and naturally held 
+   throughout the video? Or does it float, warp, or 
+   detach from the hand?
+
+2. FACE CONSISTENCY (1-10)
+   Does the person's face remain consistent across frames?
+   Any warping, morphing, or identity drift?
+
+3. HAND ARTIFACTS (1-10)
+   Are hands natural throughout? Extra fingers?
+   Melting/morphing hands?
+
+4. BACKGROUND STABILITY (1-10)
+   Does the background remain stable and realistic?
+   Any objects appearing/disappearing?
+
+5. MOTION QUALITY (1-10)
+   Does the motion look natural and UGC-authentic?
+   Not too smooth, not jerky?
+
+PASS: ALL scores >= 6
+FAIL: ANY score below 5
+
+Return JSON:
+{
+  "product_stability": 8,
+  "face_consistency": 7,
+  "hand_artifacts": 6,
+  "background_stability": 8,
+  "motion_quality": 7,
+  "overall_score": 7.2,
+  "verdict": "PASS",
+  "issues": [],
+  "worst_frame": null,
+  "fail_reason": null
+}`
+      }
+    ]
+  }]
+})
+
+If FAIL:
+  console.log('[VIDEO-QA] FAILED:', qa.fail_reason)
+  
+  // Retry video generation once with stronger anti-artifact prompt
+  if (retryCount < 1) {
+    console.log('[VIDEO-QA] Retrying video generation...')
+    return retryVideoGeneration(retryCount + 1)
+  }
+  
+  // After 1 retry, skip captions but still publish with warning
+  // (video QA failure is less critical than image QA failure)
+  console.warn('[VIDEO-QA] Publishing despite QA failure after retry')
+  await supabase.from('videos').update({
+    qa_video_score: qa.overall_score,
+    qa_video_data: qa,
+    qa_warning: qa.fail_reason
+  }).eq('id', videoId)
+
+If PASS:
+  await supabase.from('videos').update({
+    qa_video_score: qa.overall_score,
+    qa_video_data: qa
+  }).eq('id', videoId)
+
+═══════════════════════════════════════
+DATABASE MIGRATION
+═══════════════════════════════════════
+Run in Supabase SQL Editor:
+
+ALTER TABLE videos 
+  ADD COLUMN IF NOT EXISTS qa_image_score float,
+  ADD COLUMN IF NOT EXISTS qa_image_data jsonb,
+  ADD COLUMN IF NOT EXISTS qa_video_score float,
+  ADD COLUMN IF NOT EXISTS qa_video_data jsonb,
+  ADD COLUMN IF NOT EXISTS qa_warning text,
+  ADD COLUMN IF NOT EXISTS error_message text;
+
+═══════════════════════════════════════
+WIRE INTO PIPELINE RUN
+═══════════════════════════════════════
+In lib/pipeline/run.ts update the stage sequence:
+
+Stage 1: Comprehension
+Stage 2: Creative Brain  
+Stage 3: Image Generation
+Stage 3b: Image QA ← NEW (retry up to 2x if fail)
+Stage 4: Video Generation
+Stage 4b: Video QA ← NEW (retry 1x if fail)
+Stage 5: Assembly
+Stage 6: Captions
+Stage 7: Publish
+
+Log QA scores clearly:
+  [QA] Image score: 7.4/10 PASS
+  [QA] Video score: 6.8/10 PASS
+  [QA] Pipeline proceeding to assembly
+
+═══════════════════════════════════════
+DASHBOARD: Show QA scores on video cards
+═══════════════════════════════════════
+In My Videos and Recent Creations cards:
+
+If qa_image_score exists:
+  Show small score badge on thumbnail corner:
+  Green if >= 7: "QA 8.2"
+  Amber if 5-7:  "QA 6.1"  
+  Red if < 5:    "QA 4.2 ⚠"
+
+If qa_warning exists:
+  Show small ⚠ icon with tooltip showing the warning
+
+This gives instant visibility into generation quality
+without having to watch every video manually.
+
+After implementation run a test:
+  npx tsx --env-file apps/web/.env.local scripts/test-pipeline.ts
+
+The floating bag issue should now be caught at Stage 3b
+and trigger a retry with explicit hand-grip instructions.

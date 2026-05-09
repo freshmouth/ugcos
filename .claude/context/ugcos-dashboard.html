@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UGC.OS — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0C0C0F;
+  --bg-card:#141418;
+  --bg-card2:#1A1A1F;
+  --bg-hover:#1E1E24;
+  --border:rgba(255,255,255,0.07);
+  --border-hover:rgba(255,255,255,0.12);
+  --purple:#7C3AED;
+  --purple-light:#9D6BF5;
+  --purple-bg:rgba(124,58,237,0.15);
+  --purple-glow:rgba(124,58,237,0.4);
+  --green:#22C55E;
+  --green-bg:rgba(34,197,94,0.12);
+  --amber:#F59E0B;
+  --amber-bg:rgba(245,158,11,0.12);
+  --red:#EF4444;
+  --blue:#3B82F6;
+  --blue-bg:rgba(59,130,246,0.12);
+  --text-1:#FFFFFF;
+  --text-2:#A1A1AA;
+  --text-3:#52525B;
+  --sidebar-w:200px;
+  --font:'Inter',sans-serif;
+  --r-sm:8px;
+  --r-md:12px;
+  --r-lg:16px;
+  --r-xl:20px;
+}
+html{height:100%}
+body{
+  font-family:var(--font);
+  background:var(--bg);
+  color:var(--text-1);
+  min-height:100vh;
+  display:flex;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+  font-size:13px;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:4px}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  width:var(--sidebar-w);
+  flex-shrink:0;
+  background:var(--bg);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  position:fixed;
+  top:0;left:0;bottom:0;
+  z-index:50;
+  overflow-y:auto;
+}
+
+.sidebar-logo{
+  padding:20px 16px 16px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border-bottom:1px solid var(--border);
+}
+.logo-icon{
+  width:28px;height:28px;
+  background:var(--purple);
+  border-radius:7px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.logo-icon svg{width:12px;height:12px}
+.logo-text{
+  font-size:16px;font-weight:800;
+  color:var(--text-1);letter-spacing:-0.3px;
+}
+.logo-text span{color:var(--purple-light)}
+
+.sidebar-nav{
+  flex:1;
+  padding:12px 10px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 10px;
+  border-radius:var(--r-sm);
+  cursor:pointer;
+  transition:all .15s;
+  font-size:13px;font-weight:500;
+  color:var(--text-2);
+  margin-bottom:2px;
+  text-decoration:none;
+}
+.nav-item:hover{background:var(--bg-hover);color:var(--text-1)}
+.nav-item.active{
+  background:var(--purple-bg);
+  color:var(--purple-light);
+  font-weight:600;
+}
+.nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:0.8}
+.nav-item.active svg{opacity:1}
+
+.sidebar-bottom{padding:12px 10px 16px}
+.plan-card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--r-md);
+  padding:12px;
+  margin-bottom:10px;
+}
+.plan-label{font-size:9px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.plan-name{font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:2px}
+.plan-credits{font-size:11px;color:var(--text-2);margin-bottom:8px}
+.plan-bar-wrap{height:3px;background:rgba(255,255,255,0.08);border-radius:50px;margin-bottom:6px;overflow:hidden}
+.plan-bar{height:100%;background:linear-gradient(90deg,var(--purple),var(--purple-light));border-radius:50px;width:65%}
+.plan-reset{font-size:10px;color:var(--text-3);margin-bottom:10px}
+.upgrade-btn{
+  width:100%;padding:8px;border-radius:var(--r-sm);
+  background:var(--purple-bg);
+  border:1px solid rgba(124,58,237,0.3);
+  color:var(--purple-light);
+  font-family:var(--font);font-size:12px;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:all .15s;
+}
+.upgrade-btn:hover{background:var(--purple);color:#fff}
+.help-card{
+  display:flex;align-items:center;gap:10px;
+  padding:10px;border-radius:var(--r-md);
+  cursor:pointer;transition:background .15s;
+}
+.help-card:hover{background:var(--bg-hover)}
+.discord-icon{
+  width:28px;height:28px;border-radius:6px;
+  background:#5865F2;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;font-size:14px;
+}
+.help-text-title{font-size:12px;font-weight:600;color:var(--text-1)}
+.help-text-sub{font-size:10px;color:var(--text-3)}
+
+/* ── MAIN ── */
+.main{
+  margin-left:var(--sidebar-w);
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  min-height:100vh;
+}
+
+/* TOPBAR */
+.topbar{
+  position:sticky;top:0;z-index:40;
+  background:rgba(12,12,15,0.85);
+  backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  padding:0 28px;
+  height:64px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+.topbar-left h1{font-size:22px;font-weight:700;letter-spacing:-0.5px;line-height:1.1}
+.topbar-left p{font-size:12px;color:var(--text-2);margin-top:1px}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.early-badge{
+  display:flex;align-items:center;gap:6px;
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:50px;padding:6px 12px;
+  font-size:12px;font-weight:600;color:var(--text-1);
+}
+.early-dot{width:7px;height:7px;border-radius:50%;background:var(--purple-light)}
+.notif-btn{
+  width:36px;height:36px;border-radius:var(--r-sm);
+  background:var(--bg-card);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--text-2);transition:all .15s;
+  position:relative;
+}
+.notif-btn:hover{border-color:var(--border-hover);color:var(--text-1)}
+.notif-badge{
+  position:absolute;top:5px;right:5px;
+  width:7px;height:7px;border-radius:50%;
+  background:var(--red);
+  border:1.5px solid var(--bg);
+}
+.user-pill{
+  display:flex;align-items:center;gap:8px;
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:50px;padding:5px 12px 5px 5px;
+  cursor:pointer;transition:all .15s;
+}
+.user-pill:hover{border-color:var(--border-hover)}
+.user-avatar-img{
+  width:28px;height:28px;border-radius:50%;
+  background:linear-gradient(135deg,#c8a882,#a07850);
+  overflow:hidden;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:#fff;
+}
+.user-name{font-size:12px;font-weight:600;color:var(--text-1)}
+.user-role{font-size:10px;color:var(--text-3)}
+.user-chevron{color:var(--text-3);font-size:10px;margin-left:2px}
+
+/* PAGE BODY */
+.page-body{padding:24px 28px;flex:1}
+
+/* ── STAT CARDS ── */
+.stats-row{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:12px;
+  margin-bottom:20px;
+}
+.stat-card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:18px 16px;
+  transition:border-color .2s;
+}
+.stat-card:hover{border-color:var(--border-hover)}
+.stat-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.stat-label{font-size:11px;font-weight:500;color:var(--text-2);line-height:1.3}
+.stat-icon{
+  width:32px;height:32px;border-radius:8px;
+  background:var(--purple-bg);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.stat-icon svg{width:15px;height:15px;color:var(--purple-light)}
+.stat-val{font-size:26px;font-weight:700;letter-spacing:-1px;line-height:1;margin-bottom:5px}
+.stat-change{font-size:11px;font-weight:500;color:var(--green);display:flex;align-items:center;gap:3px}
+.stat-change-label{color:var(--text-3);font-weight:400}
+
+/* ── MIDDLE ROW ── */
+.mid-row{display:grid;grid-template-columns:1fr 380px;gap:14px;margin-bottom:20px}
+
+/* AI Agent card */
+.agent-card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:24px;
+  display:flex;gap:28px;
+  align-items:flex-start;
+}
+.agent-card-title{font-size:15px;font-weight:700;margin-bottom:18px}
+.agent-avatar-wrap{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  flex-shrink:0;
+}
+.agent-ring{
+  width:110px;height:110px;border-radius:50%;
+  position:relative;
+  display:flex;align-items:center;justify-content:center;
+}
+.agent-ring::before{
+  content:'';position:absolute;inset:-3px;border-radius:50%;
+  background:conic-gradient(var(--purple) 0%,var(--purple-light) 50%,transparent 50%);
+  animation:spin 3s linear infinite;
+}
+.agent-ring::after{
+  content:'';position:absolute;inset:-6px;border-radius:50%;
+  background:conic-gradient(rgba(124,58,237,0.2) 0%,transparent 60%);
+  animation:spin 4s linear infinite reverse;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.agent-inner{
+  width:100px;height:100px;border-radius:50%;
+  background:var(--bg-card2);
+  border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  position:relative;z-index:1;
+  box-shadow:0 0 30px rgba(124,58,237,0.2);
+}
+.agent-robot{font-size:38px}
+.agent-name{font-size:13px;font-weight:700;color:var(--text-1)}
+.agent-status{
+  display:flex;align-items:center;gap:5px;
+  font-size:11px;font-weight:500;color:var(--green);
+}
+.agent-status-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--green);
+  box-shadow:0 0 6px var(--green);
+  animation:pulse-green 2s ease infinite;
+}
+@keyframes pulse-green{0%,100%{opacity:1}50%{opacity:0.5}}
+.agent-steps{flex:1}
+.step-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;
+  border-bottom:1px solid var(--border);
+  font-size:12px;color:var(--text-2);
+}
+.step-row:last-child{border-bottom:none}
+.step-status-done{
+  display:flex;align-items:center;gap:5px;
+  color:var(--green);font-weight:600;font-size:11px;
+}
+.step-status-progress{
+  display:flex;align-items:center;gap:5px;
+  color:var(--purple-light);font-weight:600;font-size:11px;
+}
+.step-check{
+  width:16px;height:16px;border-radius:50%;
+  background:var(--green-bg);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.step-check svg{width:9px;height:9px}
+.step-spin{
+  width:14px;height:14px;border-radius:50%;
+  border:2px solid rgba(124,58,237,0.3);
+  border-top-color:var(--purple-light);
+  animation:spin .8s linear infinite;
+  flex-shrink:0;
+}
+
+/* Schedule card */
+.schedule-card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:20px;
+}
+.schedule-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;
+}
+.schedule-title{font-size:15px;font-weight:700}
+.schedule-link{font-size:11px;font-weight:600;color:var(--purple-light);cursor:pointer}
+.schedule-link:hover{text-decoration:underline}
+.schedule-row{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 0;
+  border-bottom:1px solid var(--border);
+}
+.schedule-row:last-child{border-bottom:none}
+.sched-time{font-size:11px;color:var(--text-3);font-weight:500;width:54px;flex-shrink:0}
+.sched-dot{width:7px;height:7px;border-radius:50%;background:var(--border-hover);flex-shrink:0}
+.sched-dot.posted{background:var(--green)}
+.sched-dot.progress{background:var(--amber)}
+.sched-platform-icon{
+  width:22px;height:22px;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;flex-shrink:0;
+}
+.sched-label{font-size:12px;font-weight:500;flex:1}
+.sched-badge{
+  font-size:10px;font-weight:600;padding:3px 9px;border-radius:50px;
+}
+.sched-badge.posted{background:var(--green-bg);color:var(--green)}
+.sched-badge.progress{background:var(--amber-bg);color:var(--amber)}
+.sched-badge.upcoming{background:var(--bg-card2);color:var(--text-3);border:1px solid var(--border)}
+
+/* ── BOTTOM ROW ── */
+.bottom-row{display:grid;grid-template-columns:1fr 260px;gap:14px}
+
+/* Creations card */
+.creations-card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:20px;
+}
+.creations-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;
+}
+.creations-title{font-size:15px;font-weight:700}
+.creations-action{font-size:11px;font-weight:600;color:var(--purple-light);cursor:pointer}
+.creations-grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:10px;
+}
+.video-card{cursor:pointer;transition:transform .2s}
+.video-card:hover{transform:translateY(-3px)}
+.video-thumb{
+  width:100%;aspect-ratio:9/16;
+  border-radius:var(--r-md);
+  overflow:hidden;position:relative;
+  background:var(--bg-card2);
+  border:1px solid var(--border);
+  margin-bottom:8px;
+}
+.video-thumb-bg{
+  width:100%;height:100%;
+  position:relative;
+  display:flex;align-items:flex-end;
+}
+.vt1{background:linear-gradient(160deg,#c8a882 0%,#6b4a2a 100%)}
+.vt2{background:linear-gradient(160deg,#3a3a3a 0%,#1a1a1a 100%)}
+.vt3{background:linear-gradient(160deg,#8a7060 0%,#4a3020 100%)}
+.vt4{background:linear-gradient(160deg,#2a2a2a 0%,#4a4030 100%)}
+.vt5{background:linear-gradient(160deg,#3a3028 0%,#1a1510 100%)}
+.video-overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(0,0,0,0.8) 0%,rgba(0,0,0,0) 50%);
+}
+.video-hook{
+  position:absolute;bottom:22px;left:8px;right:8px;
+  font-size:12px;font-weight:800;line-height:1.2;
+  text-shadow:0 2px 8px rgba(0,0,0,0.8);
+}
+.video-hook .highlight{color:#F59E0B}
+.video-hook .highlight2{color:var(--green)}
+.video-hook .highlight3{color:#EF4444}
+.video-sparkle{
+  position:absolute;top:8px;left:8px;
+  color:rgba(255,255,255,0.6);font-size:10px;
+}
+.video-duration{
+  position:absolute;bottom:6px;right:6px;
+  background:rgba(0,0,0,0.7);color:#fff;
+  font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;
+}
+.video-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.video-stats{display:flex;gap:6px;align-items:center}
+.video-stat{font-size:10px;color:var(--text-3);display:flex;align-items:center;gap:2px}
+.video-platform{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:500;color:var(--text-2)}
+.platform-icon-sm{
+  width:16px;height:16px;border-radius:3px;
+  display:flex;align-items:center;justify-content:center;font-size:9px;
+}
+.posted-label{color:var(--text-2);font-size:11px;font-weight:500}
+
+/* Right column */
+.right-col{display:flex;flex-direction:column;gap:14px}
+
+.hook-card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:18px;
+}
+.hook-header{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.hook-icon{font-size:16px}
+.hook-title{font-size:13px;font-weight:700}
+.hook-quote{
+  font-size:16px;font-weight:700;color:var(--text-1);
+  line-height:1.3;margin-bottom:6px;letter-spacing:-0.3px;
+}
+.hook-used{font-size:11px;color:var(--text-3);margin-bottom:14px}
+.hook-stat-row{display:flex;align-items:flex-end;justify-content:space-between}
+.hook-stat-label{font-size:10px;color:var(--text-3);margin-bottom:3px}
+.hook-stat-val{font-size:20px;font-weight:700;letter-spacing:-0.5px}
+.mini-chart{width:80px;height:36px}
+
+.insights-card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:18px;
+}
+.insights-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.insights-icon{
+  width:24px;height:24px;border-radius:6px;
+  background:var(--purple-bg);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;flex-shrink:0;
+}
+.insights-title{font-size:13px;font-weight:700}
+.insights-body{font-size:12px;color:var(--text-2);line-height:1.6;margin-bottom:12px}
+.insights-link{font-size:11px;font-weight:600;color:var(--purple-light);cursor:pointer}
+.insights-link:hover{text-decoration:underline}
+
+/* ── MOBILE TOPBAR ── */
+.mobile-topbar{
+  display:none;
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  background:rgba(12,12,15,0.95);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  padding:0 16px;height:56px;
+  align-items:center;justify-content:space-between;
+}
+.mobile-menu-btn{
+  width:36px;height:36px;border-radius:var(--r-sm);
+  background:var(--bg-card);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;flex-direction:column;gap:4px;padding:10px;
+}
+.mobile-menu-btn span{
+  display:block;width:16px;height:1.5px;
+  background:var(--text-2);border-radius:1px;
+  transition:all .3s;
+}
+.mobile-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,0.6);z-index:49;
+}
+.mobile-overlay.open{display:block}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.stat-card{animation:fadeUp .4s ease both}
+.stat-card:nth-child(1){animation-delay:.05s}
+.stat-card:nth-child(2){animation-delay:.1s}
+.stat-card:nth-child(3){animation-delay:.15s}
+.stat-card:nth-child(4){animation-delay:.2s}
+.stat-card:nth-child(5){animation-delay:.25s}
+
+/* ── RESPONSIVE ── */
+@media(max-width:1200px){
+  .stats-row{grid-template-columns:repeat(3,1fr)}
+  .stat-card:nth-child(4),.stat-card:nth-child(5){grid-column:auto}
+  .mid-row{grid-template-columns:1fr}
+  .bottom-row{grid-template-columns:1fr}
+  .creations-grid{grid-template-columns:repeat(4,1fr)}
+  .creations-grid .video-card:nth-child(5){display:none}
+  .right-col{flex-direction:row}
+  .hook-card,.insights-card{flex:1}
+}
+@media(max-width:900px){
+  :root{--sidebar-w:0px}
+  .sidebar{transform:translateX(-200px);transition:transform .3s ease;width:200px}
+  .sidebar.open{transform:translateX(0)}
+  .main{margin-left:0}
+  .mobile-topbar{display:flex}
+  .topbar{display:none}
+  .page-body{padding:16px;padding-top:72px}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .mid-row{grid-template-columns:1fr}
+  .agent-card{flex-direction:column;align-items:center}
+  .agent-steps{width:100%}
+  .creations-grid{grid-template-columns:repeat(3,1fr)}
+  .creations-grid .video-card:nth-child(4),.creations-grid .video-card:nth-child(5){display:none}
+  .right-col{flex-direction:column}
+}
+@media(max-width:600px){
+  .stats-row{grid-template-columns:1fr 1fr}
+  .creations-grid{grid-template-columns:repeat(2,1fr)}
+  .creations-grid .video-card:nth-child(3),.creations-grid .video-card:nth-child(4),.creations-grid .video-card:nth-child(5){display:none}
+  .mid-row{gap:12px}
+  .stat-val{font-size:22px}
+  .bottom-row{gap:12px}
+}
+</style>
+</head>
+<body>
+
+<!-- MOBILE OVERLAY -->
+<div class="mobile-overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<!-- MOBILE TOPBAR -->
+<div class="mobile-topbar">
+  <div class="mobile-menu-btn" onclick="toggleSidebar()">
+    <span></span><span></span><span></span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="logo-icon"><svg viewBox="0 0 12 12" fill="white"><path d="M3 2l7 4-7 4V2z"/></svg></div>
+    <span style="font-size:15px;font-weight:800;letter-spacing:-0.3px">UGC<span style="color:var(--purple-light)">.OS</span></span>
+  </div>
+  <div class="user-pill" style="padding:4px 8px">
+    <div class="user-avatar-img">A</div>
+    <div class="user-chevron">⌄</div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 12 12" fill="white"><path d="M3 2l7 4-7 4V2z"/></svg>
+    </div>
+    <div class="logo-text">UGC<span>.OS</span></div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <a class="nav-item active" href="#">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 11h8V2H2v9zm0 7h8v-5H2v5zm10 0h6v-9h-6v9zm0-16v5h6V2h-6z"/></svg>
+      Dashboard
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-.293.707L13 10.414V17a1 1 0 01-.553.894l-4 2A1 1 0 017 19v-8.586L3.293 6.707A1 1 0 013 6V4z"/></svg>
+      Campaigns
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm3 2h6v4H7V5zm8 8v2h1v-2h-1zm-2-2H7v4h6v-4zm2 0h1V9h-1v2zm1-4V5h-1v2h1zM5 5H4v2h1V5zM4 7H3v2h1V7zm0 2H3v2h1V9zm0 2H3v2h1v-2zm0 2H3v2h1v-2zm1 2v-2H5v2h1zm5 0v-2h-2v2h2zm2 0v-2h-1v2h1z" clip-rule="evenodd"/></svg>
+      Creative Studio
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
+      AI Avatars
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/></svg>
+      Hooks Library
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+      Auto Posting
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+      Analytics
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd"/></svg>
+      Brand Kit
+    </a>
+    <a class="nav-item" href="#">
+      <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd"/></svg>
+      Settings
+    </a>
+  </nav>
+
+  <div class="sidebar-bottom">
+    <div class="plan-card">
+      <div class="plan-label">Current Plan</div>
+      <div class="plan-name">Pro Founder</div>
+      <div class="plan-credits">10,000 credits /mo</div>
+      <div class="plan-bar-wrap"><div class="plan-bar"></div></div>
+      <div class="plan-reset">Resets in 21 days</div>
+      <button class="upgrade-btn">
+        <svg width="11" height="11" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/></svg>
+        Upgrade Plan
+      </button>
+    </div>
+    <div class="help-card">
+      <div class="discord-icon">💬</div>
+      <div>
+        <div class="help-text-title">Need help?</div>
+        <div class="help-text-sub">Join our Discord</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main">
+  <!-- DESKTOP TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <h1>Dashboard</h1>
+      <p>Overview of your AI UGC Agent</p>
+    </div>
+    <div class="topbar-right">
+      <div class="early-badge">
+        <div class="early-dot"></div>
+        Early Access
+      </div>
+      <div class="notif-btn">
+        <div class="notif-badge"></div>
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zm0 16a3 3 0 01-3-3h6a3 3 0 01-3 3z"/></svg>
+      </div>
+      <div class="user-pill">
+        <div class="user-avatar-img">A</div>
+        <div>
+          <div class="user-name">Alex</div>
+          <div class="user-role">Founder</div>
+        </div>
+        <div class="user-chevron">⌄</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAGE BODY -->
+  <div class="page-body">
+
+    <!-- STAT CARDS -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-top">
+          <div class="stat-label">Videos Created</div>
+          <div class="stat-icon">
+            <svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zm12.553 1.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"/></svg>
+          </div>
+        </div>
+        <div class="stat-val">142</div>
+        <div class="stat-change">↑ 248% <span class="stat-change-label">vs last 7 days</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-top">
+          <div class="stat-label">Videos Posted</div>
+          <div class="stat-icon">
+            <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
+          </div>
+        </div>
+        <div class="stat-val">86</div>
+        <div class="stat-change">↑ 186% <span class="stat-change-label">vs last 7 days</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-top">
+          <div class="stat-label">Views Generated</div>
+          <div class="stat-icon">
+            <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg>
+          </div>
+        </div>
+        <div class="stat-val">1.2M</div>
+        <div class="stat-change">↑ 312% <span class="stat-change-label">vs last 7 days</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-top">
+          <div class="stat-label">Engagement Rate</div>
+          <div class="stat-icon">
+            <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"/></svg>
+          </div>
+        </div>
+        <div class="stat-val">4.7%</div>
+        <div class="stat-change">↑ 87% <span class="stat-change-label">vs last 7 days</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-top">
+          <div class="stat-label">Revenue Influenced</div>
+          <div class="stat-icon">
+            <svg viewBox="0 0 20 20" fill="currentColor"><path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"/><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clip-rule="evenodd"/></svg>
+          </div>
+        </div>
+        <div class="stat-val">$128,340</div>
+        <div class="stat-change">↑ 215% <span class="stat-change-label">vs last 7 days</span></div>
+      </div>
+    </div>
+
+    <!-- MIDDLE ROW: Agent + Schedule -->
+    <div class="mid-row">
+      <!-- AI Agent Card -->
+      <div class="agent-card">
+        <div class="agent-avatar-wrap">
+          <div class="agent-ring">
+            <div class="agent-inner">
+              <div style="font-size:42px;line-height:1">🤖</div>
+            </div>
+          </div>
+          <div class="agent-name">UGC.OS Agent</div>
+          <div class="agent-status">
+            <div class="agent-status-dot"></div>
+            Active
+          </div>
+        </div>
+        <div style="flex:1">
+          <div class="agent-card-title">AI Agent Status</div>
+          <div class="agent-steps">
+            <div class="step-row">
+              <span>Finding winning hooks</span>
+              <div class="step-status-done">
+                Completed
+                <div class="step-check">
+                  <svg viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2L7.5 2" stroke="#22c55e" stroke-width="1.4" stroke-linecap="round"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="step-row">
+              <span>Generating script</span>
+              <div class="step-status-done">
+                Completed
+                <div class="step-check">
+                  <svg viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2L7.5 2" stroke="#22c55e" stroke-width="1.4" stroke-linecap="round"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="step-row">
+              <span>Creating avatar &amp; scenes</span>
+              <div class="step-status-done">
+                Completed
+                <div class="step-check">
+                  <svg viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2L7.5 2" stroke="#22c55e" stroke-width="1.4" stroke-linecap="round"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="step-row">
+              <span>Editing video</span>
+              <div class="step-status-done">
+                Completed
+                <div class="step-check">
+                  <svg viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2L7.5 2" stroke="#22c55e" stroke-width="1.4" stroke-linecap="round"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="step-row">
+              <span>Adding captions</span>
+              <div class="step-status-done">
+                Completed
+                <div class="step-check">
+                  <svg viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2L7.5 2" stroke="#22c55e" stroke-width="1.4" stroke-linecap="round"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="step-row">
+              <span>Auto posting</span>
+              <div class="step-status-progress">
+                In progress
+                <div class="step-spin"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Schedule Card -->
+      <div class="schedule-card">
+        <div class="schedule-header">
+          <div class="schedule-title">Today's Schedule</div>
+          <div class="schedule-link">View Calendar</div>
+        </div>
+        <div class="schedule-row">
+          <div class="sched-time">9:00 AM</div>
+          <div class="sched-dot posted"></div>
+          <div class="sched-platform-icon" style="background:#000">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.77 1.52V6.76a4.85 4.85 0 01-1-.07z"/></svg>
+          </div>
+          <div class="sched-label">TikTok Post</div>
+          <div class="sched-badge posted">Posted</div>
+        </div>
+        <div class="schedule-row">
+          <div class="sched-time">12:00 PM</div>
+          <div class="sched-dot posted"></div>
+          <div class="sched-platform-icon" style="background:#E1306C">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><rect x="2" y="2" width="20" height="20" rx="5" fill="none" stroke="white" stroke-width="2.2"/><circle cx="12" cy="12" r="4" fill="none" stroke="white" stroke-width="2.2"/><circle cx="17.5" cy="6.5" r="1.3" fill="white"/></svg>
+          </div>
+          <div class="sched-label">Instagram Reel</div>
+          <div class="sched-badge posted">Posted</div>
+        </div>
+        <div class="schedule-row">
+          <div class="sched-time">3:00 PM</div>
+          <div class="sched-dot progress"></div>
+          <div class="sched-platform-icon" style="background:#FF0000">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><path d="M21.543 6.498C22 8.28 22 12 22 12s0 3.72-.457 5.502c-.254.985-.997 1.76-1.938 2.022C17.896 20 12 20 12 20s-5.893 0-7.605-.476c-.945-.266-1.687-1.04-1.938-2.022C2 15.72 2 12 2 12s0-3.72.457-5.502c.254-.985.997-1.76 1.938-2.022C6.107 4 12 4 12 4s5.896 0 7.605.476c.945.266 1.687 1.04 1.938 2.022zM10 15.5l6-3.5-6-3.5v7z"/></svg>
+          </div>
+          <div class="sched-label">YouTube Short</div>
+          <div class="sched-badge progress">In progress</div>
+        </div>
+        <div class="schedule-row">
+          <div class="sched-time">6:00 PM</div>
+          <div class="sched-dot"></div>
+          <div class="sched-platform-icon" style="background:#000">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.77 1.52V6.76a4.85 4.85 0 01-1-.07z"/></svg>
+          </div>
+          <div class="sched-label">TikTok Post</div>
+          <div class="sched-badge upcoming">Upcoming</div>
+        </div>
+        <div class="schedule-row">
+          <div class="sched-time">9:00 PM</div>
+          <div class="sched-dot"></div>
+          <div class="sched-platform-icon" style="background:#E1306C">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="white"><rect x="2" y="2" width="20" height="20" rx="5" fill="none" stroke="white" stroke-width="2.2"/><circle cx="12" cy="12" r="4" fill="none" stroke="white" stroke-width="2.2"/><circle cx="17.5" cy="6.5" r="1.3" fill="white"/></svg>
+          </div>
+          <div class="sched-label">Instagram Reel</div>
+          <div class="sched-badge upcoming">Upcoming</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM ROW: Creations + Hook/Insights -->
+    <div class="bottom-row">
+      <div class="creations-card">
+        <div class="creations-header">
+          <div class="creations-title">Recent Creations</div>
+          <div class="creations-action">View all →</div>
+        </div>
+        <div class="creations-grid">
+          <!-- Video 1 -->
+          <div class="video-card">
+            <div class="video-thumb">
+              <div class="video-thumb-bg vt1">
+                <div class="video-overlay"></div>
+                <div class="video-sparkle">✦</div>
+                <div class="video-hook" style="bottom:28px">My skin hasn't</div>
+                <div class="video-duration">0:28</div>
+              </div>
+            </div>
+            <div class="video-meta">
+              <div class="video-stats">
+                <div class="video-stat">↑ 1.2M</div>
+                <div class="video-stat">♡ 45K</div>
+                <div class="video-stat">◎ 4.3%</div>
+              </div>
+            </div>
+            <div class="video-platform">
+              <div class="platform-icon-sm" style="background:#000">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.77 1.52V6.76a4.85 4.85 0 01-1-.07z"/></svg>
+              </div>
+              <span class="posted-label">Posted</span>
+            </div>
+          </div>
+          <!-- Video 2 -->
+          <div class="video-card">
+            <div class="video-thumb">
+              <div class="video-thumb-bg vt2">
+                <div class="video-overlay"></div>
+                <div class="video-sparkle">✦</div>
+                <div class="video-hook">This changed <span class="highlight">my energy...</span></div>
+                <div class="video-duration">0:31</div>
+              </div>
+            </div>
+            <div class="video-meta">
+              <div class="video-stats">
+                <div class="video-stat">↑ 892K</div>
+                <div class="video-stat">♡ 32K</div>
+                <div class="video-stat">◎ 3.8%</div>
+              </div>
+            </div>
+            <div class="video-platform">
+              <div class="platform-icon-sm" style="background:#E1306C">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><rect x="2" y="2" width="20" height="20" rx="5" fill="none" stroke="white" stroke-width="2.5"/><circle cx="12" cy="12" r="4" fill="none" stroke="white" stroke-width="2.5"/><circle cx="17.5" cy="6.5" r="1.5" fill="white"/></svg>
+              </div>
+              <span class="posted-label">Posted</span>
+            </div>
+          </div>
+          <!-- Video 3 -->
+          <div class="video-card">
+            <div class="video-thumb">
+              <div class="video-thumb-bg vt3">
+                <div class="video-overlay"></div>
+                <div class="video-sparkle">✦</div>
+                <div class="video-hook"><span class="highlight2">Finally</span><br>healthy hair</div>
+                <div class="video-duration">0:27</div>
+              </div>
+            </div>
+            <div class="video-meta">
+              <div class="video-stats">
+                <div class="video-stat">↑ 1.5M</div>
+                <div class="video-stat">♡ 58K</div>
+                <div class="video-stat">◎ 5.1%</div>
+              </div>
+            </div>
+            <div class="video-platform">
+              <div class="platform-icon-sm" style="background:#000">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05A6.34 6.34 0 003.15 15.2a6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.77 1.52V6.76a4.85 4.85 0 01-1-.07z"/></svg>
+              </div>
+              <span class="posted-label">Posted</span>
+            </div>
+          </div>
+          <!-- Video 4 -->
+          <div class="video-card">
+            <div class="video-thumb">
+              <div class="video-thumb-bg vt4">
+                <div class="video-overlay"></div>
+                <div class="video-sparkle">✦</div>
+                <div class="video-hook">The only <span class="highlight">supplement</span> I take daily.</div>
+                <div class="video-duration">0:29</div>
+              </div>
+            </div>
+            <div class="video-meta">
+              <div class="video-stats">
+                <div class="video-stat">↑ 742K</div>
+                <div class="video-stat">♡ 27K</div>
+                <div class="video-stat">◎ 3.6%</div>
+              </div>
+            </div>
+            <div class="video-platform">
+              <div class="platform-icon-sm" style="background:#FF0000">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><path d="M21.543 6.498C22 8.28 22 12 22 12s0 3.72-.457 5.502c-.254.985-.997 1.76-1.938 2.022C17.896 20 12 20 12 20s-5.893 0-7.605-.476c-.945-.266-1.687-1.04-1.938-2.022C2 15.72 2 12 2 12s0-3.72.457-5.502c.254-.985.997-1.76 1.938-2.022C6.107 4 12 4 12 4s5.896 0 7.605.476c.945.266 1.687 1.04 1.938 2.022zM10 15.5l6-3.5-6-3.5v7z"/></svg>
+              </div>
+              <span class="posted-label">Posted</span>
+            </div>
+          </div>
+          <!-- Video 5 -->
+          <div class="video-card">
+            <div class="video-thumb">
+              <div class="video-thumb-bg vt5">
+                <div class="video-overlay"></div>
+                <div class="video-sparkle">✦</div>
+                <div class="video-hook"><span class="highlight3">Stop wasting your money</span></div>
+                <div class="video-duration">0:30</div>
+              </div>
+            </div>
+            <div class="video-meta">
+              <div class="video-stats">
+                <div class="video-stat">↑ 1.1M</div>
+                <div class="video-stat">♡ 41K</div>
+                <div class="video-stat">◎ 4.0%</div>
+              </div>
+            </div>
+            <div class="video-platform">
+              <div class="platform-icon-sm" style="background:#E1306C">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="white"><rect x="2" y="2" width="20" height="20" rx="5" fill="none" stroke="white" stroke-width="2.5"/><circle cx="12" cy="12" r="4" fill="none" stroke="white" stroke-width="2.5"/><circle cx="17.5" cy="6.5" r="1.5" fill="white"/></svg>
+              </div>
+              <span class="posted-label">Posted</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column -->
+      <div class="right-col">
+        <div class="hook-card">
+          <div class="hook-header">
+            <div class="hook-icon">⚡</div>
+            <div class="hook-title">Top Performing Hook</div>
+          </div>
+          <div class="hook-quote">"I wish I knew this sooner..."</div>
+          <div class="hook-used">Used in 23 videos</div>
+          <div class="hook-stat-row">
+            <div>
+              <div class="hook-stat-label">Avg. View Rate</div>
+              <div class="hook-stat-val">21.3%</div>
+            </div>
+            <svg class="mini-chart" viewBox="0 0 80 36" fill="none">
+              <polyline points="0,28 15,22 30,25 45,14 60,10 80,6"
+                stroke="var(--purple-light)" stroke-width="2"
+                fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <polygon points="0,28 15,22 30,25 45,14 60,10 80,6 80,36 0,36"
+                fill="rgba(124,58,237,0.12)"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="insights-card">
+          <div class="insights-header">
+            <div class="insights-icon">🧠</div>
+            <div class="insights-title">AI Insights</div>
+          </div>
+          <div class="insights-body">
+            Videos with "I wish I knew" this sooner" in the first 3 seconds get 2.4x more views.
+          </div>
+          <div class="insights-link">View More Insights →</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /page-body -->
+</main>
+
+<script>
+function toggleSidebar(){
+  const s=document.getElementById('sidebar');
+  const o=document.getElementById('overlay');
+  s.classList.toggle('open');
+  o.classList.toggle('open');
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+window.addEventListener('resize',()=>{
+  if(window.innerWidth>900)closeSidebar();
+});
+</script>
+</body>
+</html>

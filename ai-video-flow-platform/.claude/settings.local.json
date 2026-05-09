@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsx *)",
+      "Bash(wmic process *)",
+      "Bash(findstr \"tsx\\\\|test-pipeline\")",
+      "Bash(sed -n '11730,11780p' scripts/metricool-swagger.yaml)",
+      "Bash(sed -n '12055,12200p' scripts/metricool-swagger.yaml)",
+      "Bash(node -e \"const d = require\\('./scripts/diagnosis-results.json'\\); const v2 = d['6150383-ig-reels-v2']; const arr = v2.data; console.log\\('v2 reels count:', arr.length\\); if\\(arr[0]\\) { const k = Object.keys\\(arr[0]\\); console.log\\('KEYS:', k.join\\(', '\\)\\); const f = arr[0]; for\\(const [key,val] of Object.entries\\(f\\)\\) { if\\(typeof val !== 'object'\\) console.log\\(' ', key, ':', String\\(val\\).slice\\(0,100\\)\\); else console.log\\(' ', key, ':', JSON.stringify\\(val\\).slice\\(0,80\\)\\); } }\")",
+      "Bash(npx tsc *)",
+      "Bash(node -e ' *)",
+      "Bash(ls apps/web/scripts)",
+      "Bash(npx ts-node *)",
+      "WebFetch(domain:docs.submagic.co)"
+    ]
+  }
+}

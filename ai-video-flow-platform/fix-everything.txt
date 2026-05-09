@@ -1,0 +1,148 @@
+Fix 3 issues. Read CLAUDE.md first.
+
+═══════════════════════════════════════
+FIX 1 — Brand context must persist across all pages
+═══════════════════════════════════════
+The selected brand (Sal Céltica vs Canela Ceylán) resets 
+when navigating between pages. Dashboard shows Sal Céltica 
+but Analytics shows Canela Ceylán.
+
+The brand selection must be stored globally and persist 
+across page navigation.
+
+Implement using URL search params as the source of truth:
+
+1. In layout.tsx or a shared provider, read ?brand={projectId} 
+   from the URL search params
+
+2. The brand switcher in the topbar updates the URL:
+   router.push(`?brand=${projectId}`)
+   
+3. Every page reads the brand from URL params:
+   const searchParams = useSearchParams()
+   const brandId = searchParams.get('brand') || defaultProjectId
+
+4. All API calls use the brandId from URL params
+
+5. When navigating between pages, preserve the brand param:
+   <Link href={`/analytics?brand=${activeBrandId}`}>Analytics</Link>
+   
+   Update ALL sidebar nav links to carry the brand param:
+   Dashboard → /dashboard?brand={activeBrandId}
+   Analytics → /analytics?brand={activeBrandId}
+   My Videos → /my-videos?brand={activeBrandId}
+   Generate → /generate?brand={activeBrandId}
+
+6. The topbar brand switcher must work the same on every page:
+   On switch: router.push(`${currentPath}?brand=${newProjectId}`)
+
+This ensures Sal Céltica selected on Dashboard = 
+Sal Céltica on Analytics = Sal Céltica everywhere.
+
+═══════════════════════════════════════
+FIX 2 — Top 3 hooks in insights + dev unlimited analysis
+═══════════════════════════════════════
+A. Show top 3 hooks instead of just 1 on the dashboard:
+
+In components/app/hook-card.tsx:
+  Accept top_hooks array (up to 3 items)
+  Display as a ranked list:
+  
+  #1 "¿Sabías que hay una sal que puede mejorar..."
+     Avg views: 622K · Why it works: [explanation]
+  
+  #2 "Esto NO es sal. Es un mineral..."  
+     Avg views: 31K · Why it works: [explanation]
+     
+  #3 "Cambia tu sal..."
+     Avg views: 68K · Why it works: [explanation]
+
+  Each hook row:
+    - Rank number in purple circle
+    - Hook text in quotes (bold)
+    - Avg views formatted
+    - Small gray "why it works" explanation below
+
+B. Remove 24h rate limit for dev account:
+
+In /app/api/insights/analyze/route.ts:
+
+const OWNER_EMAIL = 'espeliers@live.com'
+const isOwner = user.email === OWNER_EMAIL
+
+// Only apply rate limit for non-owner accounts
+if (!isOwner) {
+  const { data: recentAnalysis } = await supabase
+    .from('insights')
+    .select('id, created_at')
+    .eq('project_id', project_id)
+    .gte('created_at', new Date(Date.now() - 24*60*60*1000).toISOString())
+    .limit(1)
+    .maybeSingle()
+
+  if (recentAnalysis) {
+    return Response.json({ 
+      error: 'Analysis already run today. Try again tomorrow.',
+      cached: true 
+    }, { status: 429 })
+  }
+}
+// Owner can run unlimited analyses
+
+═══════════════════════════════════════
+FIX 3 — My Videos: only show actually posted videos
+═══════════════════════════════════════
+My Videos should ONLY show videos that were successfully 
+posted to Instagram or Facebook via Metricool.
+
+A video is "posted" if:
+  status = 'done' AND metricool_post_id IS NOT NULL
+
+Remove ALL other videos from the default view:
+  - No "Generated" tab
+  - No failed videos
+  - No videos without metricool_post_id
+  - No videos that only have fal_image_url
+
+Query:
+  SELECT v.*, 
+    COALESCE(v.captioned_url, v.cloudinary_url, v.fal_image_url) as thumbnail_url
+  FROM videos v
+  WHERE v.user_id = auth.uid()
+  AND v.status = 'done'
+  AND v.metricool_post_id IS NOT NULL
+  ORDER BY v.created_at DESC
+
+For thumbnails: since these are posted videos, pull the 
+actual thumbnail from Metricool reels data matching by 
+metricool_post_id:
+  For each video, look up the matching reel in Metricool
+  Use reel.imageUrl as the thumbnail
+  Fallback to video.fal_image_url or gradient
+
+Show per card:
+  - Real thumbnail from Metricool
+  - Hook text (video.script_prompt first 40 chars)
+  - Platform icons (IG/FB) based on which platforms it was posted to
+  - Real metrics from Metricool: views, likes, engagement
+  - 🔥 VIRAL if views >= 50K
+  - Date posted
+  - [View Post ↗] button → opens Metricool post link
+
+Empty state if no posted videos:
+  "No videos posted yet. Generate your first video."
+  [Generate Video →] button
+
+Completely remove:
+  - "Generated" tab
+  - "Published" tab label (just show the grid directly)
+  - Any videos without metricool_post_id
+  - Failed/processing video cards
+
+After all fixes verify:
+  ✓ Select Sal Céltica on dashboard → navigate to Analytics → 
+    still shows Sal Céltica data
+  ✓ Top 3 hooks shown on dashboard hook card
+  ✓ Run Analysis button works multiple times for espeliers@live.com
+  ✓ My Videos only shows 5 videos that were actually posted
+  ✓ Each My Videos card has real Metricool thumbnail + metrics

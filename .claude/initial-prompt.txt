@@ -1,0 +1,29 @@
+Read CLAUDE.md, ARCHITECTURE.md, .claude/context/env-vars.md, 
+and .claude/context/database-schema-notes.sql before doing anything else.
+
+Then execute ALL phases in order from .claude/commands/:
+  phase-1-schema.md
+  phase-2-auth.md
+  phase-3-onboarding.md
+  phase-4-dashboard.md
+  phase-5-billing.md
+  phase-6-generate.md
+  phase-7-settings.md
+  phase-8-cron.md
+
+Rules:
+- Complete each phase fully before starting the next
+- Run all tests and fix errors before moving on
+- After each phase: git add . && git commit -m "checkpoint: phase X complete"
+- If you hit an error you cannot resolve after 2 attempts, write the error 
+  to .claude/errors/phase-X-error.md and continue to the next phase
+- Do NOT stop to ask me questions — make the best decision and keep going
+- Do NOT ask for permission to create files, run commands, or install packages
+- When all 8 phases are complete, write a summary to .claude/DONE.md listing 
+  what was built, what was skipped, and any errors logged
+
+This project is duplicated and uses the same operating framework as the agentic pipeline from C:\Users\emans\ai-video-flow-agent. The existing pipeline 
+in /lib/pipeline/ (or wherever it lives) already works — do not rewrite it. 
+Your job is to add the SaaS layer on top: auth, onboarding, multi-tenant DB, 
+credits, billing, and UI. Identify the existing pipeline entry point first 
+and reference it in phase-6-generate.md before touching anything.

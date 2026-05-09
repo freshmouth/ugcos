@@ -1,0 +1,266 @@
+Add Seedance 2.0 as fallback video model when Sora is unavailable.
+Read CLAUDE.md first. Do not touch existing Sora code.
+
+═══════════════════════════════════════
+SEEDANCE 2.0 FACTS (from fal.ai docs)
+═══════════════════════════════════════
+Model IDs:
+  Standard: 'bytedance/seedance-2.0/image-to-video'
+  Fast:     'bytedance/seedance-2.0/fast/image-to-video'
+
+API call:
+const result = await fal.subscribe('bytedance/seedance-2.0/fast/image-to-video', {
+  input: {
+    prompt: seedancePrompt,
+    image_url: generatedImageUrl,
+    resolution: '720p',
+    duration: '15',        // max is 15 for Seedance (not 16 like Sora)
+    aspect_ratio: '9:16',
+    generate_audio: true   // native audio generation built-in
+  },
+  logs: true,
+  onQueueUpdate: (update) => {
+    console.log('[SEEDANCE] Status:', update.status)
+  }
+})
+
+Result: result.data.video.url
+
+═══════════════════════════════════════
+UPDATE 1 — Add Seedance-specific system prompt
+═══════════════════════════════════════
+Create: lib/pipeline/prompts/seedance-video-prompt.ts
+
+export const SEEDANCE_VIDEO_ENGINE_SYSTEM_PROMPT = `You are a Seedance 2.0 
+cinematic director. You write shot-list style video prompts that feel like 
+instructions to a director of photography — NOT image generation keywords.
+
+CRITICAL DIFFERENCE FROM OTHER MODELS:
+Seedance wants: subject + action + camera + sound + cuts
+NOT: comma-separated descriptors, quality boosters, or static scene descriptions
+
+PROMPT STRUCTURE:
+Think of each prompt as a shot list:
+  Shot 1 (0-5s): [Subject] [action], [camera movement], [ambient sound]
+  Shot 2 (5-10s): [Subject] [action], [camera movement], [ambient sound]  
+  Shot 3 (10-15s): [Subject] [action], [camera movement], [ambient sound]
+
+CAMERA LANGUAGE TO USE:
+  - "iPhone front camera, handheld, slight shake"
+  - "tight close-up pulls back slowly to medium shot"
+  - "camera stays still, subject moves toward lens"
+  - "tracking shot alongside subject"
+  - "static wide angle, subject in center-left"
+
+AUDIO DIRECTION (Seedance generates native audio):
+  - Be explicit about sounds: "sound of bag crinkling", "kitchen ambience"
+  - "subject speaks mid-sentence, casual tone, slight mouth sounds"
+  - "room tone, no music, realistic indoor echo"
+
+MOTION RULES FOR UGC FEEL:
+  - Never describe smooth transitions
+  - Use "slight motion blur", "natural handheld drift"
+  - Talent starts mid-action, never at beginning of movement
+  - One clear action per shot
+
+ANTI-POLISH FOR UGC:
+  - "imperfect framing, slightly off-center"
+  - "natural light, no fill light"
+  - "ambient room sound, no music"
+  - "casual body language, not posed"
+
+SEEDANCE SPECIFIC — describe what changes between shots:
+  The model handles continuity, so describe the TRANSITION:
+  "Cut to: tighter shot of the bag being held up..."
+  "Camera drifts right revealing..."
+
+OUTPUT FORMAT:
+Shot 1 (0-5s): [description]
+Shot 2 (5-10s): [description]  
+Shot 3 (10-15s): [description]
+Audio: [overall audio direction]
+Camera: [overall camera feel]
+Mood: [one word]`
+
+Also export:
+export const SEEDANCE_PROMPT_LOCK = `
+MANDATORY LOCKS FOR SEEDANCE UGC OUTPUT:
+
+🔒 SHOT STRUCTURE
+  Maximum 3 shots for 15 seconds
+  Each shot must have ONE clear action verb
+  Describe camera movement as a DOP would
+
+🔒 AUDIO (Seedance generates natively)
+  Describe ambient sounds explicitly
+  Include realistic mouth/handling sounds
+  No music unless specifically requested
+
+🔒 MOTION FEEL
+  All camera movement: "natural handheld drift"
+  Never: "smooth", "cinematic pan", "dolly"
+  Always: "slight shake", "imperfect", "casual"
+
+🔒 UGC AUTHENTICITY
+  Talent always mid-action at shot start
+  Never perfectly centered in frame
+  Natural body language, not model poses
+`
+
+═══════════════════════════════════════
+UPDATE 2 — Model router with fallback logic
+═══════════════════════════════════════
+Create: lib/pipeline/utils/model-router.ts
+
+export type VideoModel = 'sora' | 'seedance-fast' | 'seedance-standard'
+
+export async function selectVideoModel(): Promise<VideoModel> {
+  // Check PREFERRED_VIDEO_MODEL env var
+  const preferred = process.env.PREFERRED_VIDEO_MODEL
+  if (preferred === 'seedance') return 'seedance-fast'
+  if (preferred === 'seedance-standard') return 'seedance-standard'
+  
+  // Default: try Sora first, fall back to Seedance
+  return 'sora'
+}
+
+export function getModelId(model: VideoModel): string {
+  const models = {
+    'sora': 'fal-ai/sora',
+    'seedance-fast': 'bytedance/seedance-2.0/fast/image-to-video',
+    'seedance-standard': 'bytedance/seedance-2.0/image-to-video'
+  }
+  return models[model]
+}
+
+export function getMaxDuration(model: VideoModel): number {
+  // Sora supports 16s, Seedance max is 15s
+  return model === 'sora' ? 16 : 15
+}
+
+Add to .env.local:
+PREFERRED_VIDEO_MODEL=sora
+# Change to 'seedance' or 'seedance-standard' when Sora is discontinued
+
+═══════════════════════════════════════
+UPDATE 3 — Update video generation stage
+═══════════════════════════════════════
+In lib/pipeline/stages/04-video-generation.ts:
+
+import { selectVideoModel, getModelId, getMaxDuration } from '../utils/model-router'
+import { SEEDANCE_VIDEO_ENGINE_SYSTEM_PROMPT, SEEDANCE_PROMPT_LOCK } from '../prompts/seedance-video-prompt'
+import { SORA_VIDEO_ENGINE_SYSTEM_PROMPT, SORA_PROMPT_LOCK } from '../prompts/sora-video-prompt'
+
+export async function generateVideo(options) {
+  const model = await selectVideoModel()
+  const modelId = getModelId(model)
+  const duration = getMaxDuration(model)
+  
+  console.log(`[VIDEO] Using model: ${modelId} (${duration}s)`)
+
+  // Pick correct system prompt and lock based on model
+  const systemPrompt = model === 'sora'
+    ? SORA_VIDEO_ENGINE_SYSTEM_PROMPT
+    : SEEDANCE_VIDEO_ENGINE_SYSTEM_PROMPT
+
+  const contentTypeConfig = CONTENT_TYPES[contentType]
+  const promptLock = model === 'sora'
+    ? (contentTypeConfig?.promptLock || '')
+    : SEEDANCE_PROMPT_LOCK  // Seedance always uses its own lock for UGC
+
+  // Generate video prompt with GPT-4o
+  const videoPromptResponse = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    max_tokens: 1500,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      {
+        role: 'user',
+        content: `Create a ${model === 'sora' ? 'Sora 2 Pro' : 'Seedance 2.0'} 
+video prompt for this product video:
+
+Product: ${project.name}
+Description: ${project.product_description}
+Target audience: ${project.target_audience}
+Content type: ${contentTypeConfig.label}
+Duration: ${duration} seconds
+Language: ${project.language || 'Spanish (native Mexican/LATAM cadence)'}
+Model: ${model === 'sora' ? 'Sora 2 — descriptive atmospheric prompts' 
+                          : 'Seedance 2.0 — shot list cinematic direction'}
+
+The video starts from this generated image:
+${generatedImageUrl}
+The talent is already in scene with the product.
+
+${promptLock}`
+      }
+    ]
+  })
+
+  const videoPrompt = videoPromptResponse.choices[0].message.content
+  console.log(`[${model.toUpperCase()}-PROMPT]`, videoPrompt)
+
+  // Call the selected model
+  let falInput: any = {
+    prompt: videoPrompt,
+    image_url: generatedImageUrl,
+    aspect_ratio: '9:16',
+    duration: String(duration),
+  }
+
+  if (model === 'sora') {
+    falInput.resolution = '1080p'
+  } else {
+    // Seedance specific params
+    falInput.resolution = '720p'
+    falInput.generate_audio = true
+  }
+
+  const result = await fal.subscribe(modelId, {
+    input: falInput,
+    pollInterval: 10000,
+    timeout: 600000,
+    logs: true,
+    onQueueUpdate: (update) => {
+      console.log(`[${model.toUpperCase()}] Status:`, update.status)
+    }
+  })
+
+  const videoUrl = result.data?.video?.url
+  if (!videoUrl) throw new Error(`No video URL returned from ${model}`)
+  
+  console.log(`[VIDEO] Done:`, videoUrl)
+  return { video_url: videoUrl, model_used: model }
+}
+
+═══════════════════════════════════════
+UPDATE 4 — Update CLAUDE.md
+═══════════════════════════════════════
+Update video duration note:
+  Sora: duration = 16 seconds
+  Seedance: duration = 15 seconds (model maximum)
+  Always use getMaxDuration(model) — never hardcode
+
+Update model note:
+  Primary model: fal-ai/sora (until September 2025 deprecation)
+  Fallback model: bytedance/seedance-2.0/fast/image-to-video
+  Switch via PREFERRED_VIDEO_MODEL env var — no code changes needed
+
+═══════════════════════════════════════
+UPDATE 5 — Update test script
+═══════════════════════════════════════
+In scripts/test-image-generation.ts Stage 5:
+Log which model is being used:
+  [VIDEO MODEL] sora | 16s
+  or
+  [VIDEO MODEL] seedance-fast | 15s
+
+To test Seedance specifically, set in .env.local:
+  PREFERRED_VIDEO_MODEL=seedance
+
+Then run stage 5:
+  npx tsx --env-file .env.local scripts/test-image-generation.ts
+
+After changes show me:
+1. The Seedance prompt GPT-4o generates (different from Sora prompt)
+2. Confirm model router reads PREFERRED_VIDEO_MODEL correctly

@@ -1,0 +1,130 @@
+The metrics are completely wrong. Read CLAUDE.md first.
+
+EVIDENCE:
+Metricool UI shows for Sal Céltica Instagram Reels (last 30 days):
+  Apr 28 reel: 622,913 video views, 10,591 likes, 2.007% engagement
+  Apr 15 reel: 68,424 video views, 1,683 likes
+  Apr 23 reel: 6,452 video views, 441 likes
+  Apr 6 reel: 32,331 video views, 904 likes
+  Apr 9 reel: 10,068 video views, 305 likes
+  TOTAL: ~740,188 video views across 5 reels
+
+Dashboard shows: 279 views — completely wrong.
+
+═══════════════════════════════════════
+STEP 1 — Run this exact debug first
+═══════════════════════════════════════
+Create scripts/debug-metrics.ts and run it NOW:
+
+const headers = { 'X-Mc-Auth': process.env.METRICOOL_API_KEY! }
+const blogId = '6150383'
+const userId = '4210220'
+
+// Last 30 days
+const end = new Date()
+const start = new Date()
+start.setDate(start.getDate() - 30)
+const fmt = (d: Date) => d.toISOString().split('T')[0].replace(/-/g, '')
+
+console.log(`Date range: ${fmt(start)} to ${fmt(end)}`)
+
+// The endpoint that shows the reel list in Metricool UI
+const res = await fetch(
+  `https://app.metricool.com/api/v2/analytics/reels/instagram` +
+  `?blogId=${blogId}&userId=${userId}&from=${fmt(start)}&to=${fmt(end)}`,
+  { headers }
+)
+const data = await res.json()
+console.log('Status:', res.status)
+console.log('Type:', Array.isArray(data) ? 'array' : typeof data)
+console.log('Count:', Array.isArray(data) ? data.length : 'N/A')
+
+if (Array.isArray(data) && data.length > 0) {
+  console.log('\nALL FIELD NAMES:', Object.keys(data[0]).join(', '))
+  console.log('\nALL ITEMS WITH NUMERIC FIELDS:')
+  data.forEach((item, i) => {
+    console.log(`\n--- Reel ${i+1} ---`)
+    for (const [key, val] of Object.entries(item)) {
+      if (typeof val === 'number' || typeof val === 'string') {
+        console.log(`  ${key}: ${val}`)
+      }
+    }
+  })
+  
+  // Try to sum whatever view-like field exists
+  const possibleViewFields = ['videoViews','views','impressions','reach','videoViews','video_views']
+  for (const field of possibleViewFields) {
+    const total = data.reduce((sum: number, item: any) => sum + (item[field] || 0), 0)
+    if (total > 0) console.log(`\nSUM of ${field}: ${total}`)
+  }
+}
+
+// Also check the date format — try different formats
+const formats = [
+  { from: fmt(start), to: fmt(end) },           // YYYYMMDD
+  { from: fmt(start).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'), 
+    to: fmt(end).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3') }, // YYYY-MM-DD
+  { from: '20260401', to: '20260430' },          // Hardcoded April
+  { from: '20260101', to: fmt(end) },            // Since Jan 2026
+]
+
+console.log('\n\nTESTING DATE FORMATS:')
+for (const f of formats) {
+  const r = await fetch(
+    `https://app.metricool.com/api/v2/analytics/reels/instagram` +
+    `?blogId=${blogId}&userId=${userId}&from=${f.from}&to=${f.to}`,
+    { headers }
+  )
+  const d = await r.json()
+  const count = Array.isArray(d) ? d.length : 'not array'
+  const firstViews = Array.isArray(d) && d[0] 
+    ? `first item views: ${d[0].videoViews || d[0].views || d[0].impressions || d[0].reach || 'no view field'}`
+    : ''
+  console.log(`from=${f.from} to=${f.to} → status:${r.status} count:${count} ${firstViews}`)
+}
+
+Run:
+npx tsx --env-file apps/web/.env.local scripts/debug-metrics.ts
+
+Show me the COMPLETE output — every line.
+
+═══════════════════════════════════════
+STEP 2 — Fix /api/dashboard/stats after seeing output
+═══════════════════════════════════════
+Based on debug output, update the dashboard stats route to:
+
+1. Use the exact date format that returns the 5 reels
+2. Use the exact field name that contains video views
+   (we expect: videoViews = 622913 for the Apr 28 reel)
+3. Sum all items: totalViews = data.reduce((sum, item) => sum + item.{correct_field}, 0)
+
+The route must return numbers matching what Metricool shows:
+  views: ~740,188 (sum of all reel videoViews last 30 days)
+  engagement: avg engagementRate across all reels
+  videos_posted: data.length (5)
+
+For last 7 days (Apr 23-30):
+  Only the Apr 28 reel qualifies → views: 622,913
+  
+For last 30 days (Apr 1-30):
+  All 5 reels → views: ~740,188
+
+═══════════════════════════════════════
+STEP 3 — Fix Recent Creations to show all 5 reels
+═══════════════════════════════════════
+The Recent Creations grid shows only 1 card instead of 5.
+
+Same reels endpoint returns the 5 posts.
+Show all 5 sorted by date DESC.
+
+Each card:
+  thumbnail: item.imageUrl or item.picture or item.thumbnail
+  hook text: first 35 chars of item.text
+  metrics: item.videoViews views | item.likes likes | item.engagementRate%
+  platform: IG icon (these are reels)
+  date: item.date formatted as "Apr 28"
+
+Do not show our Supabase videos — show the actual 
+Metricool reel data.
+
+Run debug script first. Show output. Then fix.

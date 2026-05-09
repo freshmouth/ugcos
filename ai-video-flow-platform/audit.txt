@@ -1,0 +1,55 @@
+Read CLAUDE.md first. Then do a full systems audit of the 
+UGC.OS platform before we add any new features.
+
+Run the 8-dimension scan from AUDIT.md across the entire codebase.
+
+Then create scripts/system-health-check.ts that tests:
+
+1. EXTERNAL APIS:
+   - Metricool: GET /api/admin/simpleProfiles → confirm 200
+   - FAL: test connection with account info endpoint
+   - Cloudinary: list catalog/sal-celtica/ugc-refs → confirm 506 images
+   - OpenAI: test with minimal completion
+   - Supabase: confirm all tables exist with correct columns
+
+2. DATABASE HEALTH:
+   SELECT 
+     (SELECT COUNT(*) FROM profiles) as profiles,
+     (SELECT COUNT(*) FROM projects) as projects,
+     (SELECT COUNT(*) FROM videos) as videos,
+     (SELECT COUNT(*) FROM subscriptions) as subscriptions,
+     (SELECT COUNT(*) FROM insights) as insights,
+     (SELECT COUNT(*) FROM videos WHERE status NOT IN 
+       ('done','failed') 
+       AND updated_at < now() - interval '2 hours') as stuck_videos,
+     (SELECT COUNT(*) FROM projects 
+       WHERE metricool_brand_id IS NULL) as unlinked_brands,
+     (SELECT COUNT(*) FROM videos 
+       WHERE status = 'done' 
+       AND metricool_post_id IS NULL) as unposted_done_videos
+
+3. KNOWN ISSUES TO SPECIFICALLY CHECK:
+   - Brand context persists across Dashboard → Analytics → MyVideos
+   - .single() usage (should be .maybeSingle() everywhere)
+   - Any API routes missing auth check
+   - Any hardcoded blogId, userId, or brand names outside of .env
+   - NEXT_PUBLIC_ vars containing secrets
+   - Any fetch() calls without try/catch
+   - Any fetch() calls without timeout
+   - Image tags without onError fallback
+   - Empty states without CTA buttons
+   - The generate page "No project found" bug fully fixed
+   - Auth callback handling hash-based tokens correctly
+
+4. PIPELINE HEALTH:
+   - Verify all 7 stage files exist and have no TypeScript errors
+   - Check model-router.ts reads PREFERRED_VIDEO_MODEL correctly
+   - Verify Seedance fallback is wired correctly
+   - Check cron route has no infinite loops
+
+Run the health check script first:
+npx tsx --env-file apps/web/.env.local scripts/system-health-check.ts
+
+Output a prioritized fix list: CRITICAL / HIGH / MEDIUM / LOW
+Fix all CRITICAL and HIGH issues before we continue building.
+Show me the health score out of 10.

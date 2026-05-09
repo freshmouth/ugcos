@@ -1,0 +1,1 @@
+and it's still mixing my product brands, ex: on my dashboard I select sal celtica & when I go to analytics it shows only canela ceylan. the my videosarea should only show the videos published, not those not those that never actually posted and neither show the generated tab with the ones that generated from fal

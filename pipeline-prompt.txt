@@ -1,0 +1,362 @@
+You are wiring the UGC.OS agentic video pipeline into the Next.js platform.
+The dashboard UI is already built at .claude/context/ugcos-dashboard.html — match it exactly.
+
+Read CLAUDE.md and ARCHITECTURE.md before touching any file.
+
+═══════════════════════════════════════════════════════════
+WHAT YOU ARE BUILDING IN THIS SESSION
+═══════════════════════════════════════════════════════════
+The full agentic pipeline that powers the dashboard's "AI Agent Status" widget.
+When a user triggers a video generation, the system runs autonomously through
+7 stages and updates the UI in realtime via Supabase subscriptions.
+
+═══════════════════════════════════════════════════════════
+THE PIPELINE — 7 STAGES IN ORDER
+═══════════════════════════════════════════════════════════
+
+STAGE 1: COMPREHENSION (Gemini 2.5 Pro)
+  File: /lib/pipeline/stages/01-comprehension.ts
+  Input: { project_id, content_type, reference_video_url? }
+  Process:
+    - Load project from Supabase (product info, brand kit, content_types)
+    - If reference_video_url: send to Gemini 2.5 Pro with video analysis prompt
+    - Extract: hook_type, narrative_arc, pacing, location_count, cut_rhythm
+    - If no reference: use default brief from project.content_type
+  Output: ComprehensionBrief JSON
+  Status update: videos.status = 'analyzing'
+
+STAGE 2: CREATIVE BRAIN (Claude claude-sonnet-4-20250514)
+  File: /lib/pipeline/stages/02-creative-brain.ts
+  Input: ComprehensionBrief + project data
+  Process:
+    - Call Anthropic API with structured output prompt
+    - Generate complete ScenePlan JSON:
+      {
+        total_scenes: number (9-18 depending on target_duration),
+        target_duration_seconds: number,
+        avatar: { description, outfit_casual, outfit_athletic },
+        props: { continuity_prop, product_description },
+        hook_text: string (for captions overlay),
+        scenes: Scene[]
+      }
+    - Each Scene: { id, type, location, outfit, duration_seconds,
+                    camera, action, background, show_product,
+                    motion, caption, broll_source? }
+    - Enforce: sum of scene durations = target_duration_seconds exactly
+  Output: ScenePlan JSON
+  Status update: videos.status = 'scripting'
+  Store: videos.scene_plan = ScenePlan JSON
+
+STAGE 3: IMAGE GENERATION (Nano Banana Pro via fal.ai)
+  File: /lib/pipeline/stages/03-image-generation.ts
+  Input: ScenePlan
+  Process:
+    - Generate master character image ONCE:
+        model: 'fal-ai/flux/schnell' (or nano banana pro model ID)
+        prompt: avatar.description + style notes
+        store as: project.character_reference_url in Supabase
+    - For each scene where type != 'broll_stock':
+        Generate scene image using character_reference + scene.background
+        prompt: scene.action + scene.background + consistency notes
+        show_product=true: include product image composited in scene
+    - For broll_stock scenes: fetch from Pexels API using scene.broll_source
+    - ALL non-broll images generated in PARALLEL (Promise.all)
+    - Store image URLs in scene objects
+  Output: ScenePlan with image_url per scene
+  Status update: videos.status = 'generating_images'
+  API keys: FAL_KEY, PEXELS_API_KEY (add to env-vars.md)
+
+STAGE 4: VIDEO GENERATION (Seedance 2 via fal.ai)
+  File: /lib/pipeline/stages/04-video-generation.ts
+  Input: ScenePlan with image_urls
+  Process:
+    - Split scenes into Run1 (first half) and Run2 (second half)
+    - Fire BOTH runs in parallel (Promise.all on two batches)
+    - Per scene call:
+        model: 'fal-ai/seedance-v2' (confirm exact model string)
+        input: {
+          image_url: scene.image_url,
+          prompt: scene.action + ' ' + scene.motion,
+          duration: scene.duration_seconds,  // EXACT — never approximate
+          aspect_ratio: '9:16',
+          resolution: '1080p'
+        }
+    - Poll each generation until complete (fal.subscribe)
+    - Store clip URLs in scene objects
+    - On individual scene failure: retry once, then mark scene as failed
+    - If >2 scenes fail: fail entire video, trigger refund
+  Output: ScenePlan with clip_url per scene
+  Status update: videos.status = 'generating_video'
+  Critical: duration must be the EXACT value from scene.duration_seconds
+
+STAGE 5: ASSEMBLY (FFmpeg via fluent-ffmpeg)
+  File: /lib/pipeline/stages/05-assembly.ts
+  Input: ScenePlan with clip_urls
+  Process:
+    Step A — Download all clips to /tmp/ugcos/{video_id}/
+    Step B — Trim each clip to EXACT duration:
+        ffmpeg -i clip.mp4 -t {duration} -c copy trimmed.mp4
+    Step C — Apply motion effects per scene:
+        hook scenes (id <= 2): zoompan filter, slow zoom in
+        broll scenes: setpts=0.95*PTS (slight speed up)
+        product scenes: no filter, hold steady
+    Step D — Generate concat list file
+    Step E — Concatenate all trimmed clips:
+        ffmpeg -f concat -safe 0 -i list.txt -c:v libx264
+               -crf 18 -preset fast output_raw.mp4
+    Step F — Mix audio:
+        Keep Seedance native ambient audio from clips
+        Mix licensed background music at -22dB
+        ffmpeg -i output_raw.mp4 -i music.mp3
+               -filter_complex "[0:a]volume=1[a0];[1:a]volume=0.06[a1];
+               [a0][a1]amix=inputs=2[aout]"
+               -map 0:v -map "[aout]" output_assembled.mp4
+    Step G — Upload to Cloudinary:
+        folder: catalog/{project_id}/videos/
+        tags: [project_id, user_id, content_type]
+  Output: { cloudinary_url, duration_actual }
+  Status update: videos.status = 'assembling'
+  Store: videos.cloudinary_url
+
+STAGE 6: CAPTIONS (Submagic API)
+  File: /lib/pipeline/stages/06-captions.ts
+  Input: { cloudinary_url, scene_plan }
+  Process:
+    - Send cloudinary_url to Submagic API
+    - Style: hook_bold (white text, bold, word-by-word)
+    - Pass hook_text from ScenePlan for hook overlay styling
+    - Wait for captioned video URL (poll every 10s, timeout 5min)
+    - Download and re-upload to Cloudinary as final version
+  Output: { captioned_url }
+  Status update: videos.status = 'captioning'
+  Store: videos.captioned_url
+
+STAGE 7: PUBLISH (Metricool API)
+  File: /lib/pipeline/stages/07-publish.ts
+  Input: { project, captioned_url, scene_plan }
+  Process:
+    - Build caption from hook_text + product CTA
+    - If project.instagram_connected: post to Instagram
+    - If project.facebook_connected: post to Facebook
+    - Call Metricool API for each active platform
+    - Store post IDs
+  Output: { post_ids }
+  Status update: videos.status = 'done'
+  Store: videos.metricool_post_id (comma-separated if multiple)
+
+═══════════════════════════════════════════════════════════
+FILES TO CREATE
+═══════════════════════════════════════════════════════════
+
+/lib/pipeline/
+  run.ts                    ← orchestrator, imports all 7 stages
+  stages/
+    01-comprehension.ts
+    02-creative-brain.ts
+    03-image-generation.ts
+    04-video-generation.ts
+    05-assembly.ts
+    06-captions.ts
+    07-publish.ts
+  utils/
+    timing-enforcer.ts      ← normalizes scene durations to exact total
+    retry.ts                ← exponential backoff wrapper
+    cleanup.ts              ← deletes /tmp files after assembly
+    model-router.ts         ← selects model per scene type
+
+/lib/db/
+  videos.ts                 ← add: updateVideoStatus, updateScenePlan,
+                               updateCloudinaryUrl, updateCaptionedUrl,
+                               updatePostId, getVideoWithProject
+  pipeline-logs.ts          ← INSERT pipeline_logs per stage
+
+/app/api/generate/route.ts  ← POST handler (already exists, extend it)
+
+/app/api/pipeline/
+  status/[videoId]/route.ts ← GET: return current video status
+  retry/[videoId]/route.ts  ← POST: retry a failed video
+
+/components/app/
+  agent-status-widget.tsx   ← the AI Agent Status card from dashboard
+                               uses Supabase realtime subscription
+                               matches ugcos-dashboard.html design exactly
+  pipeline-progress.tsx     ← reusable step row component
+  schedule-widget.tsx       ← Today's Schedule card
+  stat-card.tsx             ← individual stat card with icon + change
+  video-thumb-card.tsx      ← video thumbnail card in Recent Creations
+  hook-card.tsx             ← Top Performing Hook card
+  insights-card.tsx         ← AI Insights card
+
+/app/(app)/dashboard/page.tsx ← full dashboard matching ugcos-dashboard.html
+
+═══════════════════════════════════════════════════════════
+DATABASE ADDITIONS
+═══════════════════════════════════════════════════════════
+
+-- Add to videos table:
+ALTER TABLE videos ADD COLUMN scene_plan jsonb;
+ALTER TABLE videos ADD COLUMN character_reference_url text;
+ALTER TABLE videos ADD COLUMN assembly_path text;
+
+-- New table for granular pipeline logging:
+CREATE TABLE pipeline_logs (
+  id            uuid primary key default gen_random_uuid(),
+  video_id      uuid references videos(id) on delete cascade,
+  stage         integer not null,  -- 1-7
+  stage_name    text not null,
+  status        text not null,     -- 'started' | 'completed' | 'failed'
+  duration_ms   integer,
+  error_message text,
+  metadata      jsonb,             -- stage-specific output
+  created_at    timestamptz default now()
+);
+
+-- Index for realtime dashboard queries:
+CREATE INDEX idx_pipeline_logs_video_id ON pipeline_logs(video_id);
+
+-- Add to projects table:
+ALTER TABLE projects ADD COLUMN character_reference_url text;
+ALTER TABLE projects ADD COLUMN voice_reference_url text;
+ALTER TABLE projects ADD COLUMN hooks_library text[] default '{}';
+
+═══════════════════════════════════════════════════════════
+REALTIME SUBSCRIPTION — THE AGENT STATUS WIDGET
+═══════════════════════════════════════════════════════════
+The agent-status-widget.tsx component subscribes to:
+
+1. videos table (user's latest in-progress video):
+   supabase.channel('active-video')
+     .on('postgres_changes', {
+       event: 'UPDATE',
+       table: 'videos',
+       filter: `user_id=eq.${userId}`
+     }, handleVideoUpdate)
+
+2. pipeline_logs table (individual stage updates):
+   supabase.channel('pipeline-logs')
+     .on('postgres_changes', {
+       event: 'INSERT',
+       table: 'pipeline_logs',
+       filter: `video_id=eq.${activeVideoId}`
+     }, handleStageUpdate)
+
+Map video.status to step completion:
+  'analyzing'        → step 1 in progress
+  'scripting'        → step 1 done, step 2 in progress
+  'generating_images'→ step 2 done, step 3 in progress
+  'generating_video' → step 3 done, step 4 in progress
+  'assembling'       → step 4 done, step 5 in progress
+  'captioning'       → step 5 done, step 6 in progress
+  'posting'          → step 6 done, step 7 in progress
+  'done'             → all steps complete
+
+Step labels for the widget (match ugcos-dashboard.html exactly):
+  1. Finding winning hooks
+  2. Generating script
+  3. Creating avatar & scenes
+  4. Editing video
+  5. Adding captions
+  6. Auto posting
+
+═══════════════════════════════════════════════════════════
+THE DASHBOARD PAGE — MATCH DESIGN EXACTLY
+═══════════════════════════════════════════════════════════
+File: /app/(app)/dashboard/page.tsx
+
+Reference: .claude/context/ugcos-dashboard.html
+
+The dashboard has this exact layout:
+  - 5 stat cards in a row (Videos Created, Posted, Views, Engagement, Revenue)
+  - Middle row: AI Agent Status (left, large) + Today's Schedule (right)
+  - Bottom row: Recent Creations (left, 5-video grid) + right column
+  - Right column: Top Performing Hook card + AI Insights card
+
+Design tokens from ugcos-dashboard.html:
+  --bg: #0C0C0F
+  --bg-card: #141418
+  --bg-card2: #1A1A1F
+  --border: rgba(255,255,255,0.07)
+  --purple: #7C3AED
+  --purple-light: #9D6BF5
+  --purple-bg: rgba(124,58,237,0.15)
+  --green: #22C55E
+  --amber: #F59E0B
+  Font: Inter
+
+Data sources for dashboard:
+  stat cards: SELECT COUNT, SUM from videos + analytics tables
+  agent status: realtime subscription on active video
+  schedule: SELECT from videos WHERE DATE(created_at) = TODAY ORDER BY scheduled_time
+  recent creations: SELECT * FROM videos WHERE user_id ORDER BY created_at DESC LIMIT 5
+  top hook: SELECT hook_text, COUNT(*), AVG(view_rate) FROM hooks_performance
+  ai insights: SELECT * FROM ai_insights WHERE user_id ORDER BY created_at DESC LIMIT 1
+
+═══════════════════════════════════════════════════════════
+PROMPT LIBRARY — BAKE INTO THE CREATIVE BRAIN
+═══════════════════════════════════════════════════════════
+Store in /lib/pipeline/prompts/
+
+character-consistency.ts — master character prompt template:
+  "Young [demographic] woman/man, [age_range], [build], [skin_tone],
+   [hair_description], natural makeup, authentic look,
+   shot on iPhone, 9:16 vertical, photorealistic,
+   [outfit_description], [location_background]"
+
+scene-types.ts — prompts per scene type:
+  talking_head: "Person speaking directly to camera, natural hand gestures,
+                 genuine expression, [action_specific], handheld feel,
+                 depth of field background blur"
+  product_reveal: "Person holding [product] up to camera at chest height,
+                   product label clearly visible and readable, slight smile,
+                   natural light, [product_description]"
+  broll_lifestyle: "Cinematic b-roll, [location], natural motion,
+                    warm color grade, no people in focus"
+  product_closeup: "Product [product_name] isolated on [surface],
+                    soft natural lighting, macro lens feel, clean background"
+
+hook-templates.ts — per content_type:
+  shocking:       ["Did you know that...", "Nobody told me this but...",
+                   "I wish I knew this sooner...", "Stop doing this if you..."]
+  informative:    ["Here's what actually works...", "The truth about...",
+                   "3 things I learned about..."]
+  transformation: ["I went from X to Y in 30 days", "Before and after..."]
+  viral:          ["Wait until you see this...", "I can't believe this works"]
+  emotional:      ["This changed everything for me...", "I finally..."]
+
+motion-presets.ts — per scene position:
+  hook (scene 1-2):  zoompan=z='min(zoom+0.0015,1.5)':d=150
+  broll:             setpts=0.95*PTS
+  product:           scale=1.02 steady hold
+  talking_mid:       no filter (natural)
+  cta:               slow zoom out
+
+═══════════════════════════════════════════════════════════
+NEW ENV VARS NEEDED
+═══════════════════════════════════════════════════════════
+GEMINI_API_KEY          ← Google AI Studio
+PEXELS_API_KEY          ← pexels.com/api
+ANTHROPIC_API_KEY       ← already exists (for Claude calls within pipeline)
+MUSIC_LIBRARY_PATH      ← path to licensed background tracks in Cloudinary
+
+Add all to .claude/context/env-vars.md and to Vercel dashboard.
+
+═══════════════════════════════════════════════════════════
+EXECUTION ORDER
+═══════════════════════════════════════════════════════════
+1. Run SQL migrations (pipeline_logs table + video column additions)
+2. Build /lib/pipeline/utils/ (timing-enforcer, retry, cleanup, model-router)
+3. Build stages 01 through 07 in order, test each before moving on
+4. Build /lib/pipeline/run.ts orchestrator
+5. Update /app/api/generate/route.ts to call runPipeline
+6. Build realtime components (agent-status-widget, pipeline-progress)
+7. Build full dashboard page matching ugcos-dashboard.html exactly
+8. Build /app/api/pipeline/status and /app/api/pipeline/retry routes
+9. Integration test: trigger one full pipeline run, verify all 7 stages complete
+
+After each stage file is built, write a simple test that calls the stage
+with mock data and verifies the output shape. Save tests to /tests/pipeline/.
+
+Do NOT start building dashboard UI until stages 1-7 are complete and tested.
+The pipeline is the product. The UI is the wrapper.
+
+Git commit after each numbered step above.

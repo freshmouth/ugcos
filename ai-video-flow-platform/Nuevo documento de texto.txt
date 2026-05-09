@@ -1,0 +1,57 @@
+Create a bypass login page for the owner account.
+Read CLAUDE.md first.
+
+Create app/dev-login/page.tsx:
+
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+
+export default async function DevLoginPage() {
+  const supabase = createClient()
+  
+  // Sign in directly using service role - owner only
+  const { createClient: createAdmin } = await import('@supabase/supabase-js')
+  const admin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+  
+  const { data, error } = await admin.auth.admin.createSession({
+    user_id: '81d1e5f0-3030-4515-b9ff-bc03ba028c42'
+  })
+  
+  if (error || !data.session) {
+    return <div style={{color:'white'}}>Error: {error?.message}</div>
+  }
+
+  // Set the session cookies manually
+  const cookieStore = cookies()
+  const { session } = data
+  
+  cookieStore.set('sb-access-token', session.access_token, {
+    httpOnly: true, secure: false, sameSite: 'lax', maxAge: 604800
+  })
+  cookieStore.set('sb-refresh-token', session.refresh_token, {
+    httpOnly: true, secure: false, sameSite: 'lax', maxAge: 604800
+  })
+
+  redirect('/dashboard')
+}
+
+The user_id '81d1e5f0-3030-4515-b9ff-bc03ba028c42' is 
+hardcoded from the Supabase query above.
+
+This is a server component that creates a real session 
+server-side and redirects to dashboard immediately.
+Only works locally since it's not protected by anything.
+Never deploy this to production.
+
+After creating the file, go to:
+http://localhost:3000/dev-login
+
+You'll be instantly logged in and redirected to dashboard.
+No emails. No magic links. No failures.
+
+Also add /dev-login to the public routes in middleware so 
+it doesn't redirect to login before the session is created.
