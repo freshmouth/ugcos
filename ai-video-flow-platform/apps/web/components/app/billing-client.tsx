@@ -2,64 +2,66 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CREDIT_PACKAGES } from '@/lib/stripe/packages'
-
-type Transaction = {
-  id: string
-  amount: number
-  reason: string
-  created_at: string
-}
+import { SUBSCRIPTION_TIERS } from '@/lib/stripe/packages'
+import type { Subscription } from '@/lib/db/subscriptions'
 
 interface Props {
-  balance: number
-  transactions: Transaction[]
-  showSuccess: boolean
+  subscription: Subscription | null
+  showSubscribed: boolean
 }
 
-function reasonLabel(reason: string): string {
-  switch (reason) {
-    case 'signup_bonus': return 'Welcome bonus 🎁'
-    case 'purchase': return 'Top up'
-    case 'video_generated': return 'Video generated'
-    case 'refund': return 'Refund'
-    default: return reason
-  }
-}
-
-export function BillingClient({ balance, transactions, showSuccess }: Props) {
+export function BillingClient({ subscription, showSubscribed }: Props) {
   const router = useRouter()
   const [toast, setToast] = useState('')
-  const [loading, setLoading] = useState<string>('')
+  const [loading, setLoading] = useState('')
+  const [portalLoading, setPortalLoading] = useState(false)
   const didToast = useRef(false)
 
   useEffect(() => {
-    if (showSuccess && !didToast.current) {
+    if (showSubscribed && !didToast.current) {
       didToast.current = true
-      setToast('Credits added! 🎉')
+      setToast("Welcome to AI Video Flow 🎉 Let's make your first video.")
       router.replace('/billing')
-      setTimeout(() => setToast(''), 4000)
+      setTimeout(() => setToast(''), 5000)
     }
-  }, [showSuccess, router])
+  }, [showSubscribed, router])
 
-  async function handleBuy(packageId: string) {
-    setLoading(packageId)
+  async function handleSubscribe(tierId: string) {
+    setLoading(tierId)
     const res = await fetch('/api/billing/create-checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ package_id: packageId }),
+      body: JSON.stringify({ tier_id: tierId }),
     })
     const data = await res.json()
     setLoading('')
     if (data.url) window.location.href = data.url
   }
 
-  const videosRemaining = Math.floor(balance / 30)
-  const progressPct = Math.min((balance / 360) * 100, 100)
+  async function handlePortal() {
+    setPortalLoading(true)
+    const res = await fetch('/api/billing/portal', { method: 'POST' })
+    const data = await res.json()
+    setPortalLoading(false)
+    if (data.url) window.location.href = data.url
+  }
+
+  const isActive = subscription?.status === 'active' || subscription?.status === 'trialing'
+  const isPastDue = subscription?.status === 'past_due'
+  const isCanceled = subscription?.status === 'canceled'
+  const showPricing = !subscription || isCanceled
+
+  const activeTier = SUBSCRIPTION_TIERS.find(t => t.id === subscription?.tier)
+  const used = subscription?.videos_used_this_cycle ?? 0
+  const limit = subscription?.videos_limit
+  const usagePct = limit ? Math.min((used / limit) * 100, 100) : 0
+  const resetDate = subscription?.cycle_reset_date
+    ? new Date(subscription.cycle_reset_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-white">Billing & Credits</h1>
+      <h1 className="mb-6 text-2xl font-bold text-white">Billing & Subscription</h1>
 
       {toast && (
         <div className="mb-4 rounded-xl p-4 text-sm font-medium text-white" style={{ background: '#7C3AED' }}>
@@ -67,81 +69,167 @@ export function BillingClient({ balance, transactions, showSuccess }: Props) {
         </div>
       )}
 
-      {/* Balance */}
-      <div className="mb-8 rounded-xl border p-6" style={{ background: '#111111', borderColor: '#1F2937' }}>
-        <div className="mb-4 flex items-center gap-3">
-          <span className="text-3xl">🪙</span>
-          <div>
-            <div className="text-3xl font-bold text-white">{balance} credits</div>
-            <div className="text-sm" style={{ color: '#9CA3AF' }}>= {videosRemaining} video{videosRemaining !== 1 ? 's' : ''} remaining</div>
+      {/* Past due warning */}
+      {isPastDue && (
+        <div className="mb-6 rounded-xl border p-4" style={{ background: 'rgba(220,38,38,0.1)', borderColor: '#DC2626' }}>
+          <div className="mb-2 font-semibold text-white">Payment failed — update your payment method to restore access</div>
+          <button
+            onClick={handlePortal}
+            disabled={portalLoading}
+            className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            style={{ background: '#DC2626' }}
+          >
+            {portalLoading ? 'Loading...' : 'Update Payment Method'}
+          </button>
+        </div>
+      )}
+
+      {/* Active / past-due plan card */}
+      {(isActive || isPastDue) && activeTier && (
+        <div className="mb-8 rounded-xl border p-6" style={{ background: '#111111', borderColor: '#1F2937' }}>
+          <div className="mb-4 flex items-start justify-between">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide mb-1" style={{ color: '#6B7280' }}>Current Plan</div>
+              <div className="text-2xl font-bold text-white">{activeTier.label}</div>
+              <div className="text-sm mt-0.5" style={{ color: '#9CA3AF' }}>
+                ${activeTier.price.toLocaleString()}/month
+              </div>
+            </div>
+            <span
+              className="rounded-full px-3 py-1 text-xs font-semibold"
+              style={{
+                background: isPastDue ? 'rgba(220,38,38,0.15)' : 'rgba(22,163,74,0.15)',
+                color: isPastDue ? '#F87171' : '#4ADE80',
+              }}
+            >
+              {isPastDue ? 'Past Due' : subscription?.status === 'trialing' ? 'Trial' : 'Active'}
+            </span>
+          </div>
+
+          {/* Usage */}
+          <div className="mb-4">
+            <div className="mb-1 flex justify-between text-sm">
+              <span style={{ color: '#9CA3AF' }}>Videos this cycle</span>
+              <span className="font-semibold text-white">
+                {used} / {limit === null ? '∞' : limit}
+              </span>
+            </div>
+            {limit !== null && (
+              <div className="h-2 w-full overflow-hidden rounded-full" style={{ background: '#1F2937' }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${usagePct}%`, background: '#7C3AED' }}
+                />
+              </div>
+            )}
+            {resetDate && (
+              <div className="mt-1 text-xs" style={{ color: '#6B7280' }}>Resets {resetDate}</div>
+            )}
+          </div>
+
+          {subscription?.cancel_at_period_end && (
+            <div className="mb-4 rounded-lg p-3 text-sm" style={{ background: 'rgba(220,38,38,0.1)', color: '#F87171' }}>
+              Your subscription will cancel at the end of the current period.
+            </div>
+          )}
+
+          <button
+            onClick={handlePortal}
+            disabled={portalLoading}
+            className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60 hover:opacity-90"
+            style={{ background: '#374151' }}
+          >
+            {portalLoading ? 'Loading...' : 'Manage Subscription'}
+          </button>
+        </div>
+      )}
+
+      {/* Pricing cards */}
+      {showPricing && (
+        <div>
+          {isCanceled && (
+            <p className="mb-4 text-sm" style={{ color: '#9CA3AF' }}>
+              Your subscription ended. Resubscribe below to continue generating videos.
+            </p>
+          )}
+          <div className="grid gap-5 md:grid-cols-3">
+            {SUBSCRIPTION_TIERS.map(tier => (
+              <div
+                key={tier.id}
+                className="relative rounded-xl border p-6 transition-colors"
+                style={{
+                  background: '#111111',
+                  borderColor: tier.highlighted ? '#7C3AED' : '#1F2937',
+                }}
+              >
+                {tier.highlighted && (
+                  <div
+                    className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs font-semibold text-white"
+                    style={{ background: '#7C3AED' }}
+                  >
+                    Most Popular
+                  </div>
+                )}
+                <div className="mb-1 text-lg font-bold text-white">{tier.label}</div>
+                <div className="mb-1 text-3xl font-bold text-white">
+                  ${tier.price.toLocaleString()}
+                  <span className="text-base font-normal" style={{ color: '#9CA3AF' }}>/mo</span>
+                </div>
+                <div className="mb-4 text-sm" style={{ color: '#6B7280' }}>
+                  {tier.videosPerMonth === null ? 'Unlimited videos' : `${tier.videosPerMonth} videos/month`}
+                </div>
+                <ul className="mb-6 space-y-2">
+                  {tier.features.map(f => (
+                    <li key={f} className="flex items-start gap-2 text-sm" style={{ color: '#D1D5DB' }}>
+                      <span className="mt-0.5 text-xs" style={{ color: '#7C3AED' }}>✓</span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={() => handleSubscribe(tier.id)}
+                  disabled={loading === tier.id}
+                  className="w-full rounded-lg py-2.5 font-semibold text-white disabled:opacity-60 hover:opacity-90"
+                  style={{ background: tier.highlighted ? '#7C3AED' : '#374151' }}
+                >
+                  {loading === tier.id ? 'Loading...' : 'Get Started'}
+                </button>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full" style={{ background: '#1F2937' }}>
-          <div className="h-full rounded-full transition-all" style={{ width: `${progressPct}%`, background: '#7C3AED' }} />
-        </div>
-      </div>
+      )}
 
-      {/* Packages */}
-      <div className="mb-8">
-        <h2 className="mb-4 text-lg font-bold text-white">Add Credits</h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          {CREDIT_PACKAGES.map(pkg => (
-            <div key={pkg.id} className="relative rounded-xl border p-6 transition-colors hover:border-violet-500" style={{ background: '#111111', borderColor: '#1F2937' }}>
-              {'badge' in pkg && pkg.badge && (
-                <div className="absolute -top-2 left-4 rounded-full px-2 py-0.5 text-xs font-semibold text-white" style={{ background: '#7C3AED' }}>
-                  {pkg.badge}
+      {/* Subscription history */}
+      {isActive && (
+        <div className="mt-8">
+          <h2 className="mb-4 text-lg font-bold text-white">Subscription Details</h2>
+          <div className="rounded-xl border p-5" style={{ background: '#111111', borderColor: '#1F2937' }}>
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <dt style={{ color: '#6B7280' }}>Plan</dt>
+                <dd className="font-medium text-white">{activeTier?.label}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt style={{ color: '#6B7280' }}>Status</dt>
+                <dd className="font-medium" style={{ color: '#4ADE80' }}>Active</dd>
+              </div>
+              {resetDate && (
+                <div className="flex justify-between">
+                  <dt style={{ color: '#6B7280' }}>Next billing date</dt>
+                  <dd className="font-medium text-white">{resetDate}</dd>
                 </div>
               )}
-              <div className="mb-1 text-lg font-bold text-white">{pkg.label}</div>
-              <div className="mb-1 text-2xl font-bold text-white">{pkg.credits} credits</div>
-              <div className="mb-4 text-sm" style={{ color: '#9CA3AF' }}>{pkg.description}</div>
-              <div className="mb-4 text-xl font-bold text-white">${pkg.price} USD</div>
-              <button
-                onClick={() => handleBuy(pkg.id)}
-                disabled={loading === pkg.id}
-                className="w-full rounded-lg py-2.5 font-semibold text-white disabled:opacity-60 hover:opacity-90"
-                style={{ background: '#7C3AED' }}
-              >
-                {loading === pkg.id ? 'Loading...' : 'Buy Now'}
-              </button>
-            </div>
-          ))}
+              <div className="flex justify-between">
+                <dt style={{ color: '#6B7280' }}>Videos limit</dt>
+                <dd className="font-medium text-white">
+                  {limit === null ? 'Unlimited' : `${limit} per month`}
+                </dd>
+              </div>
+            </dl>
+          </div>
         </div>
-      </div>
-
-      {/* Transactions */}
-      <div>
-        <h2 className="mb-4 text-lg font-bold text-white">Transaction History</h2>
-        {transactions.length === 0 ? (
-          <div className="rounded-xl border py-10 text-center" style={{ background: '#111111', borderColor: '#1F2937' }}>
-            <p style={{ color: '#6B7280' }}>No transactions yet</p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-xl border" style={{ background: '#111111', borderColor: '#1F2937' }}>
-            <table className="w-full">
-              <thead>
-                <tr style={{ borderBottom: '1px solid #1F2937' }}>
-                  {['Date', 'Type', 'Credits', 'Balance After'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-medium" style={{ color: '#6B7280' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((tx, i) => (
-                  <tr key={tx.id} style={{ borderBottom: i < transactions.length - 1 ? '1px solid #1F2937' : 'none' }}>
-                    <td className="px-4 py-3 text-sm text-white">{new Date(tx.created_at).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-sm text-white">{reasonLabel(tx.reason)}</td>
-                    <td className="px-4 py-3 text-sm font-semibold" style={{ color: tx.amount > 0 ? '#4ADE80' : '#F87171' }}>
-                      {tx.amount > 0 ? `+${tx.amount}` : tx.amount} credits
-                    </td>
-                    <td className="px-4 py-3 text-sm text-white">—</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }

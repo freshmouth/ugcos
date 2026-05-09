@@ -16,7 +16,7 @@ and Facebook daily via autopilot.
 - Tailwind CSS + Shadcn/ui
 
 ## Absolute rules — never violate
-1. Video duration is ALWAYS 15 seconds — pass duration: 15 explicitly, never rely on defaults
+1. Video duration — Sora: 16 seconds, Seedance: 15 seconds (model maximum). Always use getMaxDuration(model) — never hardcode. Primary model: fal-ai/sora-2/image-to-video. Fallback: bytedance/seedance-2.0/fast/image-to-video. Switch via PREFERRED_VIDEO_MODEL env var — no code changes needed.
 2. RLS enabled on ALL Supabase tables — never bypass, never use service role in client code
 3. Credits deducted BEFORE pipeline starts — refunded on failure via credit_transactions
 4. Never modify /lib/pipeline/ files directly unless the task explicitly says so

@@ -34,8 +34,12 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center" style={{ background: '#0A0A0A' }}>
       <div className="w-full max-w-sm rounded-xl p-8" style={{ background: '#111111' }}>
         <div className="mb-6 text-center">
-          <div className="mb-4 text-2xl font-bold text-white">▶ AI Video Flow</div>
-          <h1 className="text-2xl font-semibold text-white">Sign in to AI Video Flow</h1>
+          <div className="mb-3 flex items-center justify-center gap-1 text-[26px] font-bold tracking-tight">
+            <span className="text-white">UGC</span>
+            <span style={{ color: '#7C3AED' }}>.OS</span>
+          </div>
+          <p className="text-[13px] font-medium mb-4" style={{ color: '#52525B' }}>Your AI UGC Agent</p>
+          <h1 className="text-xl font-semibold text-white">Sign in to UGC.OS</h1>
           <p className="mt-1 text-sm" style={{ color: '#9CA3AF' }}>
             We&apos;ll send you a magic link — no password needed
           </p>
@@ -73,6 +77,8 @@ export default function LoginPage() {
             </button>
           </form>
         )}
+
+
       </div>
     </div>
   )

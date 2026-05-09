@@ -2,167 +2,215 @@
 
 ## Pre-flight check
 Before writing anything:
-1. Confirm billing is working (credits deduct and refill)
-2. Confirm the existing pipeline code location — find files in /lib/pipeline/ or equivalent
-3. DO NOT rewrite the existing pipeline — adapt it to accept project config from Supabase
+1. Confirm subscriptions table exists and billing works (Phase 5 done)
+2. Find the existing pipeline code — show me the entry point file before touching it
+3. DO NOT rewrite the existing pipeline — wrap it with subscription-aware logic
 4. List every file you will create and every file you will modify
 5. Wait for approval before writing code
 
-## Core rule for this phase
-The existing FAL → Cloudinary → Submagic → Metricool pipeline works.
+## Core principle
+The existing FAL → Cloudinary → Submagic → Metricool pipeline is already working.
 We are NOT rewriting it. We are:
-a) Wrapping it in an authenticated API route
-b) Feeding it project config from Supabase instead of lib/projects/*.js
-c) Adding credit deduction/refund logic around it
-d) Writing status updates to the videos table at each step
-e) FIXING the video duration bug: duration must be 15, always explicit
+  a) Wrapping it in an authenticated API route
+  b) Gating it by active subscription + monthly video quota
+  c) Feeding it project config from Supabase instead of hardcoded lib/projects/*.js
+  d) Writing status updates to the videos table at each step
+  e) FIXING the video duration bug: duration MUST be 15, always explicit
 
-## Bug fix — locate and fix first, before any other changes
-Search the entire codebase for the FAL video generation call.
-Find every occurrence of fal.run() or fal.subscribe() for the Sora 2 model.
-Ensure ALL calls include: duration: 15, aspect_ratio: "9:16"
-Show me the current call and the fixed version before proceeding.
+## Bug fix — do this first before anything else
+Search the entire codebase for every FAL video generation call.
+Find every fal.run() or fal.subscribe() for the Sora 2 model.
+Show me the current call and the fixed version.
+Ensure ALL calls have: duration: 15, aspect_ratio: "9:16" — hardcoded, never a variable.
 
-## Pipeline API route: /app/api/generate/route.ts (POST)
-
-### Request
+## Quota check helper: /lib/subscriptions/quota.ts
 ```typescript
-{
-  project_id: string,
-  content_type_override?: string,   // optional, overrides project.content_types[0]
-  custom_prompt?: string,           // optional, replaces auto-selected script prompt
-  image_id?: string,                // optional, use specific product image
+export async function checkVideoQuota(userId: string): Promise<{
+  allowed: boolean
+  reason?: 'no_subscription' | 'quota_exceeded' | 'subscription_inactive'
+  remaining?: number
+}> {
+  const sub = await getSubscription(userId)
+  if (!sub) return { allowed: false, reason: 'no_subscription' }
+  if (sub.status !== 'active' && sub.status !== 'trialing')
+    return { allowed: false, reason: 'subscription_inactive' }
+  if (sub.videos_limit === null) return { allowed: true, remaining: Infinity }
+  const remaining = sub.videos_limit - sub.videos_used_this_cycle
+  if (remaining <= 0) return { allowed: false, reason: 'quota_exceeded' }
+  return { allowed: true, remaining }
 }
 ```
 
-### Auth
-Reject if no session. User can only generate for their own projects.
+## Pipeline API: /app/api/generate/route.ts (POST)
+
+### Request body
+```typescript
+{
+  project_id: string,
+  content_type_override?: string,
+  custom_prompt?: string,
+  image_id?: string,
+}
+```
 
 ### Flow
 ```
-1. VALIDATE
-   - Fetch project from Supabase (verify user_id = auth.uid())
-   - Fetch credit balance
-   - If balance < 30 → return 402 { error: 'insufficient_credits' }
+1. VERIFY AUTH
+   Reject if no session.
+   Fetch project from Supabase — verify project.user_id = auth.uid()
 
-2. DEDUCT CREDITS
-   - UPDATE credits SET balance = balance - 30 WHERE user_id
-   - INSERT credit_transactions (amount: -30, reason: 'video_generated')
+2. CHECK QUOTA (replaces credit check)
+   const quota = await checkVideoQuota(userId)
+   if (!quota.allowed) return 403 { error: quota.reason }
 
 3. CREATE VIDEO ROW
-   - INSERT into videos: { project_id, user_id, status: 'pending', content_type, script_prompt }
-   - Return { video_id } to client immediately (don't await pipeline)
-   - Run pipeline in background (use waitUntil if on Vercel Edge, or fire-and-forget)
+   INSERT into videos: { project_id, user_id, status: 'pending', content_type }
+   Return { video_id } to client immediately
+   Run pipeline in background (do not await — use Vercel waitUntil or fire-and-forget)
 
-4. PIPELINE (update video status at each step)
-   Each step: UPDATE videos SET status = '...', updated_at = now() WHERE id = video_id
+4. INCREMENT QUOTA COUNTER
+   await incrementVideoCount(userId)
+   (Decrement on failure — see step 5 error handling)
+
+5. PIPELINE
+   Update videos.status at each step via updateVideoStatus(videoId, status)
 
    STEP 1 — status: 'generating'
      Select product image:
-       - If image_id provided: fetch that product_image URL
-       - Else: pick random from project's product_images
+       - If image_id provided: use that product_image URL
+       - Else: pick from project's product_images (random)
      Call FAL image generation:
-       model: project.imageGenModel (from project row, default: 'fal-ai/flux/schnell')
-       prompt: build from project.system_prompt + content_type + script_prompt
+       model: project.imageGenModel (default 'fal-ai/flux/schnell')
+       prompt: built from project.system_prompt + content_type
      UPDATE videos SET fal_image_url = result.url
 
    STEP 2 — status: 'processing'
      Select script prompt:
        - If custom_prompt provided: use it
-       - Else: pick from project.script_prompts by rotating index (day-of-year % array.length)
+       - Else: rotate through project.script_prompts by day-of-year index
      Call FAL Sora 2:
-       CRITICAL: duration MUST be 15 — hardcoded, no variable, no default
+       *** CRITICAL: duration MUST be 15 — never a variable, never a default ***
        {
-         prompt: selectedScriptPrompt,
+         prompt: selectedPrompt,
          image_url: fal_image_url,
          duration: 15,
          aspect_ratio: "9:16"
        }
-     Poll until complete (fal.subscribe or fal.queue.result)
+     Await completion via fal.subscribe or fal.queue.result
      UPDATE videos SET fal_video_url = result.url, script_prompt = selectedPrompt
 
    STEP 3 — status: 'uploading'
      Upload fal_video_url to Cloudinary:
        folder: project.cloudinary_folder + 'videos/'
-       tags: [project.id, user_id, content_type]
-       Apply upscale transformation (use existing Cloudinary config)
+       tags: [project.id, userId, content_type]
+       Apply existing upscale transformation
      UPDATE videos SET cloudinary_url = secure_url
 
    STEP 4 — status: 'captioning'
-     Call Submagic API with cloudinary_url:
-       style: project.submagicStyle (or default)
-       request: hook + burned-in captions
+     Call Submagic API with cloudinary_url
      Await captioned video URL
      UPDATE videos SET captioned_url = result.url
 
    STEP 5 — status: 'posting'
+     Only post if project has connected platforms:
+       instagram_connected → post to Instagram
+       facebook_connected  → post to Facebook
      Call Metricool API:
        brand_id: project.metricool_brand_id
        video_url: captioned_url
-       caption: selectedScriptPrompt (truncated to platform limits)
-       platforms: derive from project.instagram_connected + project.facebook_connected
+       caption: selectedPrompt (truncated to platform limits)
      UPDATE videos SET metricool_post_id = result.post_id
 
    STEP 6 — status: 'done'
-     UPDATE videos SET status = 'done', updated_at = now()
+     UPDATE videos SET status = 'done'
 
-5. ON ANY STEP FAILURE
-   - UPDATE videos SET status = 'failed', error_message = error.message
-   - Refund credits:
-     UPDATE credits SET balance = balance + 30
-     INSERT credit_transactions (amount: +30, reason: 'refund', video_id)
-   - Log error with project_id tag to Cloudinary (existing log system)
+6. ON ANY STEP FAILURE
+   UPDATE videos SET status = 'failed', error_message = error.message
+   Refund quota: await decrementVideoCount(userId)
+   Log error with project.id tag via existing Cloudinary log system
 ```
+
+## Shared pipeline function
+Extract pipeline logic into /lib/pipeline/run.ts so cron can reuse it:
+
+```typescript
+export async function runPipeline(options: {
+  project: Project
+  userId: string
+  videoId: string
+  contentType: string
+  customPrompt?: string
+  imageId?: string
+  triggeredBy: 'manual' | 'cron'
+}): Promise<{ success: boolean; error?: string }>
+```
+
+Both /api/generate and /api/cron import this. No duplicated pipeline code.
 
 ## Generate page: /app/(app)/generate/page.tsx
 
-### Layout
-Clean single-column form, max-w-lg centered.
-Heading: "Generate a Video"
-Subheading: "Creates a 15-second video and posts to your social accounts"
+### Quota display at top
+```
+Active plan: Growth  ·  32 / 60 videos used this month  ·  Resets May 15
+[████████░░░░░░░░░░░░]
+```
+If quota exhausted:
+Yellow banner: "You've used all 60 videos for this month."
+[ Upgrade Plan ] → /billing   [ Wait for reset: May 15 ]
 
-### Credit display at top
-```
-🪙 120 credits remaining · This video costs 30 credits
-```
-If < 30 credits: replace with warning banner + "Add Credits" button → /billing
+Scale tier: show "Unlimited" instead of progress bar.
 
 ### Form fields
 
-1. Content Type (from project preferences, overridable)
-   Pill-style selector showing project's saved content_types, user can pick one for this run
+1. Content Type
+   Pill selector showing project's saved content_types.
+   User can pick one for this run.
 
-2. Product Image (optional override)
-   Small grid of their uploaded product images (from product_images table)
-   Click to select, or leave unselected = AI picks automatically
-   Shown as thumbnails, 60px wide
+2. Product Image (optional)
+   Thumbnail grid of uploaded product images.
+   Click to select specific image, or leave empty = AI picks.
 
 3. Custom Hook Prompt (optional)
    Textarea: "Override the AI script (optional)"
    Placeholder: "Leave empty to auto-generate from your content library"
 
 4. Generate button
-   [ ▶ Generate Video — 30 credits ]
+   [ ▶ Generate Video ]
    Full width, bg #7C3AED, font-bold, h-14, rounded-xl
-   Disabled if: credits < 30 OR generating in progress
+   Disabled if: quota exhausted OR generation in progress
+   Show remaining count below: "28 videos remaining this month"
 
 ### After clicking Generate
-1. Call POST /api/generate → receive { video_id }
+1. POST /api/generate → receive { video_id }
 2. Redirect to /dashboard
-3. Dashboard's realtime subscription picks up the new video row and shows live status
-4. Show toast: "Generating your video... we'll update you when it's ready"
+3. Realtime subscription shows live status updates on the video row
+4. Toast: "Generating your video... we'll update you in a few minutes"
 
-## DB helper functions to add to /lib/db/videos.ts
+## DB helpers to add
+
+### /lib/db/videos.ts additions
 ```typescript
-createVideo(data)                → INSERT into videos
-updateVideoStatus(id, status, extra?)  → UPDATE videos SET status + any extra fields
-refundVideoCredits(userId, videoId)    → UPDATE credits + INSERT transaction
+createVideo(data)
+updateVideoStatus(id, status, extra?)
+```
+
+### /lib/db/subscriptions.ts additions
+```typescript
+incrementVideoCount(userId)  → videos_used_this_cycle += 1
+decrementVideoCount(userId)  → videos_used_this_cycle -= 1 (refund on failure)
 ```
 
 ## After completing this phase
-1. Test full generate flow with a real project (use test FAL keys if available)
-2. Confirm video row status updates in realtime on dashboard
-3. Confirm credits deducted before pipeline, refunded on failure
-4. Confirm video duration is 15s in FAL call (check FAL dashboard logs)
-5. Update CLAUDE.md Phase 6 checkbox to [x]
-6. git commit -m "checkpoint: pipeline + generate page complete"
+1. Test full generate flow end-to-end with a real project
+2. Confirm video status updates in realtime on dashboard
+3. Confirm quota increments after successful generation
+4. Confirm quota decrements if pipeline fails
+5. Confirm video is 15 seconds (check FAL dashboard logs)
+6. Test quota block when at limit (temporarily set videos_limit = 0 to test)
+7. Update CLAUDE.md Phase 6 checkbox to [x]
+8. git commit -m "checkpoint: generate + pipeline complete"
+
+## Do NOT do in this phase
+- No credits system — does not exist
+- No settings page
+- No cron yet

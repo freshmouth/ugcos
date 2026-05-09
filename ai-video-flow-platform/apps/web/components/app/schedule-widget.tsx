@@ -2,6 +2,7 @@
 
 type ScheduleItem = {
   time: string
+  dayLabel?: string
   platform: 'instagram' | 'facebook' | 'tiktok'
   label: string
   status: 'posted' | 'progress' | 'upcoming'
@@ -27,68 +28,78 @@ const STATUS_DOT: Record<string, string> = {
 
 interface Props {
   items: ScheduleItem[]
+  title?: string
 }
 
-export function ScheduleWidget({ items }: Props) {
-  if (!items.length) {
-    items = [
-      { time: '8:00 AM', platform: 'instagram', label: 'Instagram Reel', status: 'upcoming' },
-      { time: '12:00 PM', platform: 'facebook', label: 'Facebook Video', status: 'upcoming' },
-      { time: '6:00 PM', platform: 'instagram', label: 'Instagram Reel', status: 'upcoming' },
-    ]
-  }
-
+export function ScheduleWidget({ items, title = "Today's Schedule" }: Props) {
   return (
     <div
       className="rounded-[16px] p-5"
       style={{ background: '#141418', border: '1px solid rgba(255,255,255,0.07)' }}
     >
       <div className="flex items-center justify-between mb-4">
-        <div className="text-[15px] font-bold">Today&apos;s Schedule</div>
-        <button
-          className="text-[11px] font-semibold"
-          style={{ color: '#9D6BF5' }}
-        >
-          View Calendar
-        </button>
+        <div className="text-[15px] font-bold">{title}</div>
+        <span className="text-[11px] font-semibold" style={{ color: '#52525B' }}>
+          {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        </span>
       </div>
 
-      <div>
-        {items.map((item, i) => {
-          const platform = PLATFORM_ICONS[item.platform] ?? PLATFORM_ICONS['instagram']!
-          const badge = STATUS_BADGE[item.status] ?? STATUS_BADGE['upcoming']!
-          const dot = STATUS_DOT[item.status] ?? STATUS_DOT['upcoming']!
+      {items.length === 0 ? (
+        <div className="py-6 text-center">
+          <p className="text-[12px]" style={{ color: '#52525B' }}>No posts scheduled</p>
+          <p className="text-[11px] mt-1" style={{ color: '#3F3F46' }}>Generate a video to auto-schedule</p>
+        </div>
+      ) : (
+        <div>
+          {items.map((item, i) => {
+            const platform = PLATFORM_ICONS[item.platform] ?? PLATFORM_ICONS['instagram']!
+            const badge = STATUS_BADGE[item.status] ?? STATUS_BADGE['upcoming']!
+            const dot = STATUS_DOT[item.status] ?? STATUS_DOT['upcoming']!
 
-          return (
-            <div
-              key={i}
-              className="flex items-center gap-[10px] py-[9px]"
-              style={i < items.length - 1 ? { borderBottom: '1px solid rgba(255,255,255,0.07)' } : {}}
-            >
-              <span className="text-[11px] font-medium w-[54px] flex-shrink-0" style={{ color: '#52525B' }}>
-                {item.time}
-              </span>
+            return (
               <div
-                className="w-[7px] h-[7px] rounded-full flex-shrink-0"
-                style={{ background: dot }}
-              />
-              <div
-                className="w-[22px] h-[22px] rounded-[5px] flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0"
-                style={{ background: platform.bg }}
+                key={i}
+                className="flex items-center gap-[10px] py-[9px]"
+                style={i < items.length - 1 ? { borderBottom: '1px solid rgba(255,255,255,0.07)' } : {}}
               >
-                {platform.icon}
+                {/* Time + day label */}
+                <div className="flex-shrink-0" style={{ minWidth: '64px' }}>
+                  {item.dayLabel && (
+                    <div style={{ fontSize: '9px', fontWeight: 600, color: '#3F3F46', lineHeight: 1, marginBottom: '2px' }}>
+                      {item.dayLabel}
+                    </div>
+                  )}
+                  <div style={{ fontSize: '11px', fontWeight: 500, color: '#52525B' }}>
+                    {item.time}
+                  </div>
+                </div>
+
+                <div className="w-[7px] h-[7px] rounded-full flex-shrink-0" style={{ background: dot }} />
+
+                <div
+                  className="flex items-center justify-center text-white font-bold flex-shrink-0"
+                  style={{ width: '22px', height: '22px', borderRadius: '5px', background: platform.bg, fontSize: '9px' }}
+                >
+                  {platform.icon}
+                </div>
+
+                <span className="text-[12px] font-medium flex-1 truncate">{item.label}</span>
+
+                <span
+                  className="text-[10px] font-semibold px-[9px] py-[3px] rounded-full flex-shrink-0"
+                  style={{
+                    background: badge.bg,
+                    color: badge.color,
+                    border: item.status === 'upcoming' ? '1px solid rgba(255,255,255,0.07)' : undefined,
+                  }}
+                >
+                  {badge.label}
+                </span>
               </div>
-              <span className="text-[12px] font-medium flex-1">{item.label}</span>
-              <span
-                className="text-[10px] font-semibold px-[9px] py-[3px] rounded-full"
-                style={{ background: badge.bg, color: badge.color, border: item.status === 'upcoming' ? '1px solid rgba(255,255,255,0.07)' : undefined }}
-              >
-                {badge.label}
-              </span>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

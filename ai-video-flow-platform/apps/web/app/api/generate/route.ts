@@ -43,9 +43,23 @@ export async function POST(request: Request) {
     }, { status: 402 })
   }
 
+  // 3. Daily limit — max 2 videos per user per UTC day
+  const todayStart = new Date()
+  todayStart.setUTCHours(0, 0, 0, 0)
+  const { count: todayCount } = await supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .gte('created_at', todayStart.toISOString())
+    .neq('status', 'failed')
+
+  if ((todayCount ?? 0) >= 2) {
+    return NextResponse.json({ error: 'daily_limit_exceeded', limit: 2 }, { status: 429 })
+  }
+
   const contentType = content_type_override || project.content_types?.[0] || 'informative'
 
-  // 3. Create video row
+  // 4. Create video row
   const { data: video } = await supabase
     .from('videos')
     .insert({

@@ -24,6 +24,7 @@ const CONTENT_TYPES = [
   { id: 'transformation', emoji: '💪', label: 'Transformation', desc: 'Before/after, results-driven content' },
   { id: 'humor', emoji: '🤣', label: 'Humor', desc: 'Lighthearted content that makes people laugh' },
   { id: 'sales', emoji: '🛒', label: 'Sales & Promo', desc: 'Direct offer, discount, urgency-driven' },
+  { id: 'scroll_stopper', emoji: '🛑', label: 'Scroll Stopper', desc: 'Controversy + strong hook engineered to stop the scroll' },
 ]
 
 function OnboardingContent() {

@@ -1,8 +1,9 @@
 import { promises as fs } from 'fs'
 import path from 'path'
+import os from 'os'
 
 export async function cleanupTmp(videoId: string): Promise<void> {
-  const dir = path.join('/tmp', 'ugcos', videoId)
+  const dir = path.join(os.tmpdir(), 'ugcos', videoId)
   try {
     await fs.rm(dir, { recursive: true, force: true })
   } catch {
@@ -11,7 +12,7 @@ export async function cleanupTmp(videoId: string): Promise<void> {
 }
 
 export async function ensureTmpDir(videoId: string): Promise<string> {
-  const dir = path.join('/tmp', 'ugcos', videoId)
+  const dir = path.join(os.tmpdir(), 'ugcos', videoId)
   await fs.mkdir(dir, { recursive: true })
   return dir
 }

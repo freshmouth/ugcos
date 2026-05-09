@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
-const TABS = ['Profile', 'My Product', 'Social Accounts', 'Autopilot'] as const
+const TABS = ['Profile', 'My Product', 'Social Accounts', 'Autopilot', 'My Brands'] as const
 type Tab = (typeof TABS)[number]
 
 const CONTENT_TYPES = [
@@ -14,6 +14,7 @@ const CONTENT_TYPES = [
   { id: 'transformation', emoji: '💪', label: 'Transformation' },
   { id: 'humor', emoji: '🤣', label: 'Humor' },
   { id: 'sales', emoji: '🛒', label: 'Sales & Promo' },
+  { id: 'scroll_stopper', emoji: '🛑', label: 'Scroll Stopper' },
 ]
 
 type Profile = {
@@ -23,17 +24,18 @@ type Project = {
   id: string; name: string; product_description: string | null; target_audience: string | null
   product_category: string | null; content_types: string[]; posting_frequency: string
   posting_time: string; autopilot: boolean; instagram_connected: boolean; facebook_connected: boolean
-  metricool_brand_id: string | null; script_prompts: string[]
+  metricool_brand_id: string | null; metricool_blog_name: string | null; active: boolean; script_prompts: string[]
 }
 type ProductImage = { id: string; url: string; public_id: string }
 
 interface Props {
   profile: Profile | null
   project: Project | null
+  allProjects: Project[]
   productImages: ProductImage[]
 }
 
-export function SettingsClient({ profile: initialProfile, project: initialProject, productImages: initialImages }: Props) {
+export function SettingsClient({ profile: initialProfile, project: initialProject, allProjects: initialAllProjects, productImages: initialImages }: Props) {
   const supabase = createClient()
   const [tab, setTab] = useState<Tab>('Profile')
   const [toast, setToast] = useState('')
@@ -259,6 +261,11 @@ export function SettingsClient({ profile: initialProfile, project: initialProjec
         </div>
       )}
 
+      {/* My Brands */}
+      {tab === 'My Brands' && (
+        <BrandsTab allProjects={initialAllProjects} onToast={showToast} />
+      )}
+
       {/* Autopilot */}
       {tab === 'Autopilot' && (
         <div className="rounded-xl border p-6 space-y-6" style={{ background: '#111111', borderColor: '#1F2937' }}>
@@ -306,6 +313,210 @@ export function SettingsClient({ profile: initialProfile, project: initialProjec
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── My Brands tab ────────────────────────────────────────────────────────────
+
+type MetricoolBrand = {
+  id?: string | number
+  blogId?: string | number
+  name?: string
+  blogName?: string
+  username?: string
+  picture?: string
+  avatar?: string
+  networks?: Array<{ network?: string; type?: string; name?: string }>
+}
+
+type BrandsTabProps = {
+  allProjects: Project[]
+  onToast: (msg: string) => void
+}
+
+function BrandsTab({ allProjects, onToast }: BrandsTabProps) {
+  const supabase = createClient()
+  const MAX_ACTIVE = 3
+
+  const [brands, setBrands] = useState<MetricoolBrand[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [projects, setProjects] = useState<Project[]>(allProjects)
+  const [saving, setSaving] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/metricool/brands')
+      .then(r => r.json())
+      .then((data: unknown) => {
+        const list: MetricoolBrand[] = Array.isArray(data)
+          ? data
+          : Array.isArray((data as Record<string, unknown>).brands)
+            ? (data as { brands: MetricoolBrand[] }).brands
+            : Array.isArray((data as Record<string, unknown>).data)
+              ? (data as { data: MetricoolBrand[] }).data
+              : []
+        setBrands(list)
+        setLoading(false)
+      })
+      .catch((e: unknown) => {
+        setError(String(e))
+        setLoading(false)
+      })
+  }, [])
+
+  function getBlogId(b: MetricoolBrand): string {
+    return String(b.blogId ?? b.id ?? '')
+  }
+  function getBlogName(b: MetricoolBrand): string {
+    return b.blogName ?? b.name ?? b.username ?? getBlogId(b)
+  }
+
+  function isActive(b: MetricoolBrand): boolean {
+    const id = getBlogId(b)
+    return projects.some(p => p.metricool_brand_id === id && p.active)
+  }
+
+  function activeCount(): number {
+    return projects.filter(p => p.active && p.metricool_brand_id).length
+  }
+
+  async function toggle(b: MetricoolBrand) {
+    const blogId = getBlogId(b)
+    const blogName = getBlogName(b)
+    const existing = projects.find(p => p.metricool_brand_id === blogId)
+    const currentlyActive = existing?.active ?? false
+
+    if (!currentlyActive && activeCount() >= MAX_ACTIVE) {
+      onToast(`Max ${MAX_ACTIVE} active brands allowed on your plan`)
+      return
+    }
+
+    setSaving(blogId)
+    try {
+      if (existing) {
+        const { error } = await supabase
+          .from('projects')
+          .update({ active: !currentlyActive, metricool_blog_name: blogName })
+          .eq('id', existing.id)
+        if (error) throw error
+        setProjects(prev => prev.map(p => p.id === existing.id ? { ...p, active: !currentlyActive, metricool_blog_name: blogName } : p))
+      } else {
+        // Create minimal project row for this brand
+        const { data, error } = await supabase
+          .from('projects')
+          .insert({
+            name: blogName,
+            metricool_brand_id: blogId,
+            metricool_blog_name: blogName,
+            active: true,
+          })
+          .select()
+          .single()
+        if (error) throw error
+        setProjects(prev => [...prev, data as Project])
+      }
+      onToast(`${blogName} ${!currentlyActive ? 'activated' : 'deactivated'}`)
+    } catch (e) {
+      onToast(`Error: ${String(e)}`)
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  const rowStyle = { borderColor: '#1F2937' }
+
+  return (
+    <div className="rounded-xl border p-6 space-y-4" style={{ background: '#111111', borderColor: '#1F2937' }}>
+      <div>
+        <h3 className="font-semibold text-white mb-1">My Metricool Brands</h3>
+        <p className="text-sm" style={{ color: '#9CA3AF' }}>
+          Select up to {MAX_ACTIVE} brands to post from. Active brands appear in your schedule.
+        </p>
+      </div>
+
+      <div className="text-xs font-medium px-3 py-1.5 rounded-lg inline-block" style={{ background: '#1F2937', color: '#9CA3AF' }}>
+        {activeCount()} / {MAX_ACTIVE} active
+      </div>
+
+      {loading && (
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-14 rounded-xl animate-pulse" style={{ background: '#1A1A1A' }} />
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <p className="text-sm" style={{ color: '#DC2626' }}>
+          Could not load brands: {error}
+        </p>
+      )}
+
+      {!loading && !error && brands.length === 0 && (
+        <p className="text-sm" style={{ color: '#6B7280' }}>
+          No brands found. Check that METRICOOL_API_KEY and METRICOOL_USER_ID are set correctly.
+        </p>
+      )}
+
+      {!loading && brands.map(b => {
+        const id = getBlogId(b)
+        const name = getBlogName(b)
+        const active = isActive(b)
+        const isSaving = saving === id
+        const atLimit = !active && activeCount() >= MAX_ACTIVE
+        const avatarUrl = b.picture ?? b.avatar ?? null
+        const networks: string[] = (b.networks ?? []).map(n =>
+          (n.network ?? n.type ?? n.name ?? '').toLowerCase()
+        ).filter(Boolean)
+        const hasIG = networks.some(n => n.includes('instagram'))
+        const hasFB = networks.some(n => n.includes('facebook'))
+
+        return (
+          <div key={id} className="flex items-center justify-between rounded-xl border px-4 py-3" style={rowStyle}>
+            <div className="flex items-center gap-3">
+              {/* Brand avatar */}
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrl} alt={name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+              ) : (
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                  style={{ background: '#374151' }}
+                >
+                  {name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <div className="font-medium text-white text-sm">{name}</div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  {hasIG && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background: '#E1306C' }}>IG</span>
+                  )}
+                  {hasFB && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded text-white" style={{ background: '#1877F2' }}>FB</span>
+                  )}
+                  {!hasIG && !hasFB && (
+                    <span className="text-xs" style={{ color: '#6B7280' }}>ID: {id}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => toggle(b)}
+              disabled={isSaving || atLimit}
+              className="relative h-7 w-12 rounded-full transition-colors disabled:opacity-40"
+              style={{ background: active ? '#16A34A' : '#374151' }}
+              title={atLimit ? `Max ${MAX_ACTIVE} brands active` : undefined}
+            >
+              <span
+                className="absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform"
+                style={{ left: '2px', transform: active ? 'translateX(20px)' : 'none' }}
+              />
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }

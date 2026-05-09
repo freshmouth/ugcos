@@ -1,9 +1,5 @@
-import path from 'path'
-import { promises as fs } from 'fs'
 import { v2 as cloudinary } from 'cloudinary'
 import type { ScenePlan } from '../types'
-import { downloadFile, ensureTmpDir } from '../utils/cleanup'
-import { getMotionFilter } from '../prompts/motion-presets'
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -22,136 +18,85 @@ export async function stage05Assembly(
   projectId: string,
   userId: string
 ): Promise<AssemblyResult> {
-  const tmpDir = await ensureTmpDir(videoId)
+  const tmpFolder = `catalog/${projectId}/tmp/${videoId}`
+  const finalFolder = `catalog/${projectId}/videos`
 
-  // Step A: Download all clips
-  const clipPaths: string[] = []
-  await Promise.all(
-    plan.scenes.map(async (scene, i) => {
-      if (!scene.clip_url) throw new Error(`Scene ${scene.id} has no clip_url`)
-      const clipPath = path.join(tmpDir, `clip_${String(i).padStart(3, '0')}.mp4`)
-      await downloadFile(scene.clip_url, clipPath)
-      clipPaths[i] = clipPath
+  // Step 1: Upload all clips to Cloudinary in parallel with ordered public_ids
+  const scenesWithClips = plan.scenes.filter((s): s is typeof s & { clip_url: string } => Boolean(s.clip_url))
+  if (!scenesWithClips.length) throw new Error('No scenes have clips — assembly cannot proceed')
+  const skipped = plan.scenes.length - scenesWithClips.length
+  if (skipped > 0) console.log(`[PIPELINE] Stage 5: ${skipped} scene(s) skipped (no clip_url)`)
+  console.log(`[PIPELINE] Stage 5: Uploading ${scenesWithClips.length} clips to Cloudinary...`)
+  const uploadResults = await Promise.all(
+    scenesWithClips.map(async (scene, i) => {
+      const publicId = `${tmpFolder}/clip_${String(i).padStart(3, '0')}`
+      const result = await cloudinary.uploader.upload(scene.clip_url, {
+        resource_type: 'video',
+        public_id: publicId,
+        overwrite: true,
+      })
+      const audioMeta = (result as unknown as { audio?: { codec?: string; bit_rate?: string } }).audio
+      const audioBitrate = parseInt(audioMeta?.bit_rate ?? '0')
+      if (!audioMeta?.codec || audioBitrate < 1000) {
+        throw new Error(`NO_AUDIO: scene ${i + 1} clip has no audible audio (codec: ${audioMeta?.codec ?? 'none'}, bitrate: ${audioBitrate}bps) — re-generation required`)
+      }
+      console.log(`[PIPELINE] Stage 5: Scene ${i + 1} audio OK (${audioMeta.codec}, ${Math.round(audioBitrate / 1000)}kbps)`)
+      return {
+        index: i,
+        publicId: result.public_id,
+        url: result.secure_url,
+        duration: (result.duration as number | undefined) ?? scene.duration_seconds,
+      }
     })
   )
 
-  // Steps B-F: FFmpeg processing
-  const outputPath = path.join(tmpDir, 'output_assembled.mp4')
-  await runFfmpegPipeline(plan, clipPaths, tmpDir, outputPath)
+  // Sort by index to guarantee correct order
+  uploadResults.sort((a, b) => a.index - b.index)
+  console.log(`[PIPELINE] Stage 5: All ${uploadResults.length} clips uploaded`)
 
-  // Step G: Upload to Cloudinary
-  const folder = `catalog/${projectId}/videos`
-  const uploadResult = await cloudinary.uploader.upload(outputPath, {
-    resource_type: 'video',
-    folder,
-    tags: [projectId, userId, 'assembled'],
-    transformation: [{ quality: 'auto:best', fetch_format: 'mp4' }],
-  })
+  // Step 2: Concatenate using Cloudinary splice transformation
+  const finalPublicId = `${finalFolder}/assembled_${videoId}`
 
-  return {
-    cloudinary_url: uploadResult.secure_url,
-    duration_actual: uploadResult.duration ?? plan.target_duration_seconds,
-  }
-}
+  let cloudinaryUrl: string
+  let durationActual: number
 
-async function runFfmpegPipeline(
-  plan: ScenePlan,
-  clipPaths: string[],
-  tmpDir: string,
-  outputPath: string
-): Promise<void> {
-  const ffmpeg = await importFfmpeg()
-
-  // Step B+C: Trim and apply motion effects per clip
-  const trimmedPaths: string[] = []
-  for (let i = 0; i < plan.scenes.length; i++) {
-    const scene = plan.scenes[i]!
-    const inputPath = clipPaths[i]!
-    const trimmedPath = path.join(tmpDir, `trimmed_${String(i).padStart(3, '0')}.mp4`)
-    const motionFilter = getMotionFilter(scene.id, scene.type)
-
-    await new Promise<void>((resolve, reject) => {
-      let cmd = ffmpeg(inputPath)
-        .inputOptions([`-t ${scene.duration_seconds}`])
-        .outputOptions(['-c:v libx264', '-crf 18', '-preset fast', '-an'])
-
-      if (motionFilter) {
-        cmd = cmd.videoFilters(motionFilter)
-      }
-
-      cmd.output(trimmedPath)
-        .on('end', resolve)
-        .on('error', reject)
-        .run()
+  if (uploadResults.length === 1) {
+    // Single clip — just re-upload with final folder + tags
+    const r = await cloudinary.uploader.upload(uploadResults[0]!.url, {
+      resource_type: 'video',
+      public_id: finalPublicId,
+      overwrite: true,
+      tags: [projectId, userId, 'assembled'],
     })
-
-    trimmedPaths.push(trimmedPath)
-  }
-
-  // Step D: Generate concat list
-  const listPath = path.join(tmpDir, 'concat_list.txt')
-  const listContent = trimmedPaths.map(p => `file '${p}'`).join('\n')
-  await fs.writeFile(listPath, listContent, 'utf8')
-
-  // Step E: Concatenate
-  const rawPath = path.join(tmpDir, 'output_raw.mp4')
-  await new Promise<void>((resolve, reject) => {
-    ffmpeg()
-      .input(listPath)
-      .inputOptions(['-f concat', '-safe 0'])
-      .outputOptions(['-c:v libx264', '-crf 18', '-preset fast'])
-      .output(rawPath)
-      .on('end', resolve)
-      .on('error', reject)
-      .run()
-  })
-
-  // Step F: Mix audio (background music if available)
-  const musicPath = process.env.MUSIC_LIBRARY_PATH
-  if (musicPath) {
-    await new Promise<void>((resolve, reject) => {
-      ffmpeg(rawPath)
-        .input(musicPath)
-        .complexFilter([
-          '[0:a]volume=1[a0]',
-          '[1:a]volume=0.06[a1]',
-          '[a0][a1]amix=inputs=2[aout]',
-        ])
-        .outputOptions(['-map 0:v', '-map [aout]', '-c:v copy'])
-        .output(outputPath)
-        .on('end', resolve)
-        .on('error', () => {
-          // Fall back to raw if audio mix fails
-          fs.copyFile(rawPath, outputPath).then(resolve).catch(reject)
-        })
-        .run()
-    })
+    cloudinaryUrl = r.secure_url
+    durationActual = (r.duration as number | undefined) ?? plan.target_duration_seconds
   } else {
-    await fs.copyFile(rawPath, outputPath)
-  }
-}
+    // Build splice chain: each subsequent clip is appended to the base (clip_000)
+    // Format: l_video:{publicId1}/fl_splice/l_video:{publicId2}/fl_splice
+    const spliceStr = uploadResults.slice(1)
+      .map(c => `l_video:${c.publicId.replace(/\//g, ':')}/fl_splice`)
+      .join('/')
 
-async function importFfmpeg() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const ffmpegStatic = require('ffmpeg-static') as string
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const ffmpeg = require('fluent-ffmpeg') as (input?: string) => FluentFfmpegCommand
-  if (ffmpegStatic) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('fluent-ffmpeg').setFfmpegPath(ffmpegStatic)
-  }
-  return ffmpeg
-}
+    console.log(`[PIPELINE] Stage 5: Concatenating via Cloudinary splice...`)
+    console.log(`[PIPELINE] Stage 5: Splice transformation: ${spliceStr.slice(0, 120)}...`)
 
-// Minimal type for fluent-ffmpeg usage in this file
-type FluentFfmpegCommand = {
-  input: (i: string) => FluentFfmpegCommand
-  inputOptions: (opts: string[]) => FluentFfmpegCommand
-  outputOptions: (opts: string[]) => FluentFfmpegCommand
-  videoFilters: (f: string) => FluentFfmpegCommand
-  complexFilter: (f: string[]) => FluentFfmpegCommand
-  output: (o: string) => FluentFfmpegCommand
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  on: (event: string, cb: (...args: any[]) => void) => FluentFfmpegCommand
-  run: () => void
+    // Upload base clip with eager splice transformation applied synchronously
+    const assembled = await cloudinary.uploader.upload(uploadResults[0]!.url, {
+      resource_type: 'video',
+      public_id: finalPublicId,
+      overwrite: true,
+      eager: [{ raw_transformation: spliceStr }],
+      eager_async: false,
+      tags: [projectId, userId, 'assembled'],
+    })
+
+    // Prefer the eager-transformed URL (has all clips) over the raw upload URL
+    const eagerResult = (assembled.eager as Array<{ secure_url: string; duration?: number }> | undefined)?.[0]
+    cloudinaryUrl = eagerResult?.secure_url ?? assembled.secure_url
+    durationActual = eagerResult?.duration ?? (assembled.duration as number | undefined) ?? plan.target_duration_seconds
+
+    console.log(`[PIPELINE] Stage 5: Assembled URL: ${cloudinaryUrl}`)
+  }
+
+  return { cloudinary_url: cloudinaryUrl, duration_actual: durationActual }
 }

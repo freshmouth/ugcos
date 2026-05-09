@@ -20,7 +20,31 @@ export function selectImageModel(sceneType: SceneType): ModelChoice {
   }
 }
 
-export const VIDEO_MODEL = 'fal-ai/seedance-v2'
 export const CHARACTER_IMAGE_MODEL = 'fal-ai/flux/schnell'
 export const COMPREHENSION_MODEL = 'gemini-2.5-pro'
-export const CREATIVE_BRAIN_MODEL = 'claude-sonnet-4-6'
+export const CREATIVE_BRAIN_MODEL = 'gemini-2.5-flash'
+
+// ── Video model selection ────────────────────────────────────────────────────
+
+export type VideoModel = 'sora' | 'seedance-fast' | 'seedance-standard'
+
+export async function selectVideoModel(): Promise<VideoModel> {
+  const preferred = process.env.PREFERRED_VIDEO_MODEL
+  if (preferred === 'seedance') return 'seedance-fast'
+  if (preferred === 'seedance-standard') return 'seedance-standard'
+  return 'sora'
+}
+
+export function getModelId(model: VideoModel): string {
+  const models: Record<VideoModel, string> = {
+    'sora': 'fal-ai/sora-2/image-to-video',
+    'seedance-fast': 'bytedance/seedance-2.0/fast/image-to-video',
+    'seedance-standard': 'bytedance/seedance-2.0/image-to-video',
+  }
+  return models[model]
+}
+
+export function getMaxDuration(model: VideoModel): number {
+  // Sora supports 16s, Seedance max is 15s
+  return model === 'sora' ? 16 : 15
+}

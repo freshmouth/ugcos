@@ -18,19 +18,24 @@ type Video = {
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  pending:    { bg: '#1F2937', text: '#9CA3AF', label: 'Pending' },
-  generating: { bg: '#78350F', text: '#FCD34D', label: 'Generating...' },
-  processing: { bg: '#78350F', text: '#FCD34D', label: 'Processing...' },
-  uploading:  { bg: '#1E3A5F', text: '#60A5FA', label: 'Uploading' },
-  captioning: { bg: '#1E3A5F', text: '#60A5FA', label: 'Captioning' },
-  posting:    { bg: '#1E3A5F', text: '#60A5FA', label: 'Posting' },
-  done:       { bg: '#14532D', text: '#4ADE80', label: 'Done ✓' },
-  failed:     { bg: '#7F1D1D', text: '#F87171', label: 'Failed' },
+  pending:           { bg: '#1F2937', text: '#9CA3AF', label: 'Pending' },
+  analyzing:         { bg: '#78350F', text: '#FCD34D', label: '1/7 Analyzing...' },
+  scripting:         { bg: '#78350F', text: '#FCD34D', label: '2/7 Scripting...' },
+  generating_images: { bg: '#78350F', text: '#FCD34D', label: '3/7 Generating Images...' },
+  generating_video:  { bg: '#78350F', text: '#FCD34D', label: '4/7 Generating Video...' },
+  assembling:        { bg: '#1E3A5F', text: '#60A5FA', label: '5/7 Assembling...' },
+  captioning:        { bg: '#1E3A5F', text: '#60A5FA', label: '6/7 Captioning...' },
+  posting:           { bg: '#1E3A5F', text: '#60A5FA', label: '7/7 Posting...' },
+  generating:        { bg: '#78350F', text: '#FCD34D', label: 'Generating...' },
+  processing:        { bg: '#78350F', text: '#FCD34D', label: 'Processing...' },
+  uploading:         { bg: '#1E3A5F', text: '#60A5FA', label: 'Uploading' },
+  done:              { bg: '#14532D', text: '#4ADE80', label: 'Done ✓' },
+  failed:            { bg: '#7F1D1D', text: '#F87171', label: 'Failed' },
 }
 
 interface Props {
   userId: string
-  initialCredits: number
+  videosRemaining: number
   initialVideos: Video[]
   project: { id: string; name: string; instagram_connected: boolean; facebook_connected: boolean } | null
   showWelcome: boolean
@@ -40,9 +45,8 @@ function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export function DashboardClient({ userId, initialCredits, initialVideos, project, showWelcome }: Props) {
+export function DashboardClient({ userId, videosRemaining, initialVideos, project, showWelcome }: Props) {
   const router = useRouter()
-  const [credits, setCredits] = useState(initialCredits)
   const [videos, setVideos] = useState<Video[]>(initialVideos)
   const [toast, setToast] = useState('')
   const [previewVideo, setPreviewVideo] = useState<Video | null>(null)
@@ -51,7 +55,7 @@ export function DashboardClient({ userId, initialCredits, initialVideos, project
   useEffect(() => {
     if (showWelcome && !didWelcome.current) {
       didWelcome.current = true
-      setToast("Your first video is on us 🎉 You have 30 credits to get started.")
+      setToast("Welcome! Your subscription is active — start generating videos.")
       router.replace('/dashboard')
       setTimeout(() => setToast(''), 5000)
     }
@@ -88,7 +92,7 @@ export function DashboardClient({ userId, initialCredits, initialVideos, project
       {/* Stats */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         {[
-          { label: 'Credits Remaining', value: `${credits} credits`, sub: <Link href="/billing" className="text-violet-400 hover:underline text-xs">Top Up</Link> },
+          { label: 'Videos Remaining', value: videosRemaining === Infinity ? 'Unlimited' : `${videosRemaining} left`, sub: <Link href="/billing" className="text-violet-400 hover:underline text-xs">Upgrade Plan</Link> },
           { label: 'Total Videos', value: videos.length.toString() },
           { label: 'Last Posted', value: lastPosted ? formatDate(lastPosted.created_at) : 'Never' },
           { label: 'Social Status', value: socialStatus },
@@ -103,19 +107,21 @@ export function DashboardClient({ userId, initialCredits, initialVideos, project
 
       {/* CTA */}
       <div className="mb-8 text-center">
-        {credits >= 30 ? (
+        {videosRemaining > 0 ? (
           <>
             <Link href="/generate" className="inline-block rounded-xl px-8 py-4 text-lg font-bold text-white" style={{ background: '#7C3AED' }}>
               ▶ Generate New Video
             </Link>
-            <p className="mt-2 text-sm" style={{ color: '#6B7280' }}>Costs 30 credits · You have {credits} remaining</p>
+            <p className="mt-2 text-sm" style={{ color: '#6B7280' }}>
+              {videosRemaining === Infinity ? 'Unlimited videos on your plan' : `${videosRemaining} video${videosRemaining === 1 ? '' : 's'} remaining this cycle`}
+            </p>
           </>
         ) : (
           <>
             <Link href="/billing" className="inline-block rounded-xl px-8 py-4 text-lg font-bold text-white" style={{ background: '#DC2626' }}>
-              Top Up to Generate
+              Upgrade to Generate
             </Link>
-            <p className="mt-2 text-sm" style={{ color: '#DC2626' }}>You need 30 credits to generate a video</p>
+            <p className="mt-2 text-sm" style={{ color: '#DC2626' }}>You&apos;ve used all videos in your current billing cycle</p>
           </>
         )}
       </div>

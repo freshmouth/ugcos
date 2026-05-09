@@ -11,6 +11,7 @@ export type Project = {
   posting_frequency: string
   posting_time: string
   metricool_brand_id: string | null
+  metricool_blog_name: string | null
   instagram_connected: boolean
   facebook_connected: boolean
   active: boolean

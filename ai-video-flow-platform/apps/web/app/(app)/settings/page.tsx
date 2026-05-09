@@ -7,16 +7,20 @@ export default async function SettingsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [profileResult, projectResult, imagesResult] = await Promise.all([
+  const [profileResult, projectsResult, imagesResult] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', user.id).single(),
-    supabase.from('projects').select('*').eq('user_id', user.id).single(),
+    supabase.from('projects').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
     supabase.from('product_images').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
   ])
+
+  const projects = projectsResult.data ?? []
+  const primaryProject = projects[0] ?? null
 
   return (
     <SettingsClient
       profile={profileResult.data}
-      project={projectResult.data}
+      project={primaryProject}
+      allProjects={projects}
       productImages={imagesResult.data ?? []}
     />
   )
