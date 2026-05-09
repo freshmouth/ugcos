@@ -262,7 +262,6 @@ export default async function DashboardPage({
     topHookResult,
     insightResult,
     activeBrandsResult,
-    structuredInsightResult,
   ] = await Promise.all([
     supabase.from('videos').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
     supabase.from('videos').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'done'),
@@ -272,8 +271,6 @@ export default async function DashboardPage({
     supabase.from('videos').select('script_prompt').eq('user_id', user.id).eq('status', 'done').not('script_prompt', 'is', null),
     supabase.from('ai_insights').select('insight').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).single(),
     supabase.from('projects').select('id, name, metricool_brand_id, metricool_blog_name').eq('user_id', user.id).eq('active', true).not('metricool_brand_id', 'is', null),
-    // Structured AI insights (from insights engine — table may not exist yet, errors are swallowed)
-    supabase.from('insights').select('top_hooks, ai_insight, recommended_hook, posts_analyzed, chart_scores, project_id, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
   ])
 
   const activeBrands = (activeBrandsResult.data ?? []).map(p => ({
@@ -281,6 +278,13 @@ export default async function DashboardPage({
     name: (p.metricool_blog_name ?? p.name) as string,
     blogId: p.metricool_brand_id as string,
   }))
+
+  const activeProjectId = selectedBrandId || activeBrands[0]?.id || null
+
+  // Structured AI insights scoped to the active brand
+  const structuredInsightResult = activeProjectId
+    ? await supabase.from('insights').select('top_hooks, ai_insight, recommended_hook, posts_analyzed, chart_scores, project_id, created_at').eq('user_id', user.id).eq('project_id', activeProjectId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    : { data: null }
 
   const brandsToFetch = selectedBrandId
     ? activeBrands.filter(b => b.id === selectedBrandId)
@@ -593,9 +597,9 @@ export default async function DashboardPage({
               recommendedHook={latestInsights?.recommended_hook ?? null}
             />
 
-            {activeBrands[0] && (
+            {activeProjectId && (
               <InsightsAnalyzeButton
-                projectId={activeBrands[0].id}
+                projectId={activeProjectId}
                 lastAnalyzedAt={latestInsights?.created_at ?? null}
               />
             )}
