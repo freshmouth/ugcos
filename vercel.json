@@ -2,5 +2,11 @@
   "buildCommand": "cd ai-video-flow-platform/apps/web && npm install && npm run build",
   "outputDirectory": "ai-video-flow-platform/apps/web/.next",
   "installCommand": "cd ai-video-flow-platform/apps/web && npm install",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/canela",
+      "schedule": "0 16 */2 * *"
+    }
+  ]
 }
