@@ -1,0 +1,135 @@
+UGC.OS Privacy Policy
+
+Effective Date: July 6, 2026
+Last Updated: July 6, 2026
+
+1. Introduction
+
+UGC.OS ("UGC.OS," "we," "us," or "our") provides an AI-powered video content production platform that helps brands and creators plan, generate, and publish user-generated-style content ("Service"). This Privacy Policy explains how we collect, use, disclose, and safeguard information when you use our website, dashboard, and related services (collectively, the "Platform").
+
+By creating an account or using the Platform, you agree to the collection and use of information as described in this policy. If you do not agree, please do not use the Platform.
+
+2. Information We Collect
+
+2.1 Information You Provide Directly
+
+
+Account information: name, email address, password (hashed), company/brand name, billing details.
+Content inputs: briefs, scripts, product descriptions, brand guidelines, images, video clips, and other assets you upload or generate through the Platform.
+Persona and voice data: any AI persona configurations, voice samples, or likeness data you create or upload for use in generated content.
+Communications: messages you send to support, feedback, or survey responses.
+
+
+2.2 Information from Connected Third-Party Accounts
+
+If you connect social or marketing accounts (e.g., via our Metricool integration) to schedule or analyze content, we receive:
+
+
+Account identifiers and profile metadata
+Post performance metrics (impressions, engagement, reach)
+Publishing permissions you grant to those platforms
+
+
+We only access what is necessary to provide scheduling, publishing, and analytics features, and only with your explicit authorization (typically via OAuth).
+
+2.3 Information Collected Automatically
+
+
+Usage data: pages visited, features used, workflow steps completed, timestamps, click data.
+Device and log data: IP address, browser type, operating system, referring URLs.
+Cookies and similar technologies: used for authentication, session management, and (where applicable) analytics. See Section 8.
+
+
+2.4 AI-Generated Content Data
+
+When you use the Platform to generate video, audio, or image content, inputs and outputs may be processed and temporarily or persistently stored (via our infrastructure, including Supabase-hosted databases and storage, and third-party AI/render providers) to deliver the Service, enable revisions, and maintain your content library.
+
+3. How We Use Information
+
+We use collected information to:
+
+
+Provide, operate, and maintain the Platform, including content generation, scheduling, and publishing workflows.
+Authenticate accounts and manage multi-tenant access and permissions.
+Process payments and manage subscriptions.
+Generate analytics and insights about content performance.
+Improve and train internal tooling and workflow logic (not to train third-party foundation models beyond what those providers' own terms permit — see Section 5).
+Communicate with you about updates, support, and service-related notices.
+Detect, prevent, and address fraud, abuse, or security issues.
+Comply with legal obligations.
+
+
+We do not sell your personal information.
+
+4. Legal Bases for Processing (EEA/UK Users)
+
+Where applicable, we process personal data under one or more of the following bases: performance of a contract, your consent, our legitimate interests (operating and improving the Platform, security), and compliance with legal obligations.
+
+5. Third-Party Service Providers
+
+To operate the Platform, we share limited data with the following categories of processors, strictly for the purpose of delivering the Service:
+
+CategoryPurposeExamplesDatabase & auth infrastructureStoring account, content, and application dataSupabaseSocial/marketing integrationPublishing and analyticsMetricoolVoice AIGenerating synthetic voice/audio contentElevenLabsAI generation & computeRendering AI video, image, and text contentGPU cloud/render providers, foundation model APIsPayment processingBilling and subscription managementPayment processor(s) as selected at checkoutHosting infrastructureApplication hostingCloud/VPS providers
+
+These providers are contractually restricted from using your data for purposes other than providing services to us, except where they act as independent controllers under their own privacy terms (e.g., a foundation model provider's API terms). We encourage you to review those providers' own privacy policies for details on their handling of data submitted through their APIs.
+
+6. Data Retention
+
+We retain account data for as long as your account is active. Generated content and assets are retained until you delete them or close your account, subject to reasonable backup retention periods. We may retain limited data after account closure where required for legal, tax, security, or dispute-resolution purposes.
+
+7. Your Rights
+
+Depending on your location, you may have the right to:
+
+
+Access, correct, or delete your personal information
+Object to or restrict certain processing
+Request data portability
+Withdraw consent where processing is based on consent
+Lodge a complaint with a data protection authority
+
+
+To exercise these rights, contact us using the details in Section 12. We will respond within the timeframe required by applicable law.
+
+7.1 California Residents
+
+California residents have rights under the CCPA/CPRA, including the right to know, delete, correct, and opt out of the sale or sharing of personal information. We do not sell or share personal information as those terms are defined under the CCPA/CPRA.
+
+8. Cookies and Tracking
+
+We use cookies and similar technologies for:
+
+
+Essential functions (login sessions, security)
+Preference storage
+Analytics (where enabled), to understand feature usage and improve the Platform
+
+
+You can control cookies through your browser settings. Disabling essential cookies may limit Platform functionality.
+
+9. Data Security
+
+We implement technical and organizational measures — including encryption in transit, access controls, and infrastructure-level safeguards — designed to protect your information. No method of transmission or storage is completely secure, and we cannot guarantee absolute security.
+
+10. International Data Transfers
+
+Your information may be processed and stored in countries other than your own, including the United States and countries where our infrastructure and service providers operate. Where required, we rely on appropriate safeguards (such as standard contractual clauses) for such transfers.
+
+11. Children's Privacy
+
+The Platform is not directed to individuals under 18. We do not knowingly collect personal information from children. If you believe a child has provided us with personal information, please contact us so we can delete it.
+
+12. Contact Us
+
+If you have questions about this Privacy Policy or wish to exercise your rights, contact us at:
+
+UGC.OS
+Email: [privacy@ugcos.ai]
+Website: [ugcos.ai]
+
+13. Changes to This Policy
+
+We may update this Privacy Policy from time to time. We will post the updated version with a revised "Last Updated" date, and, for material changes, provide additional notice (such as an email or in-app notification) where required by law.
+
+
+This document is a general-purpose template and does not constitute legal advice. We recommend having it reviewed by a qualified attorney familiar with data protection laws in the jurisdictions where UGC.OS operates (e.g., GDPR for EU/UK users, CCPA/CPRA for California, and Mexican data protection law (LFPDPPP) given your base of operations) before publishing it live.
